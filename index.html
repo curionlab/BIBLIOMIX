@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>BIBLIOMIX</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="assets/css/styles.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="text-stone-800">
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="text-center mb-8 md:mb-12">
+            <h1 class="text-3xl md:text-4xl font-bold text-stone-900">BIBLIOMIX</h1>
+            <h2 class="text-xl md:text-2xl font-light text-amber-800/80 mt-2">AIエージェントの知の化学反応 シミュレーション</h2>
+            <div class="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg max-w-3xl mx-auto">
+                <p class="text-lg font-semibold text-stone-800">中央の問い</p>
+                <p class="text-2xl md:text-3xl font-bold mt-2 text-amber-900" id="main-central-question"></p>
+            </div>
+            <div class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg max-w-xl mx-auto" id="api-key-section">
+                <label for="gemini-api-key" class="block text-sm font-medium text-blue-800 mb-2">Gemini APIキーを入力してください:</label>
+                <input type="password" id="gemini-api-key" class="w-full p-2 border border-blue-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="your-gemini-api-key-here">
+                <button id="save-api-key-btn" class="mt-3 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-200 shadow-md">APIキーを保存</button>
+                <p id="api-key-status" class="mt-2 text-sm text-green-700 hidden">APIキーが保存されました！</p>
+            </div>
+            <div id="game-controls" class="mt-6 flex justify-center gap-4 hidden">
+                <button id="start-simulation-btn" class="px-6 py-3 bg-amber-600 text-white font-semibold rounded-md hover:bg-amber-700 transition-colors duration-200 shadow-lg">シミュレーション開始</button>
+                <button id="next-turn-btn" class="px-6 py-3 bg-teal-600 text-white font-semibold rounded-md hover:bg-teal-700 transition-colors duration-200 shadow-lg hidden">次へ</button>
+                <button id="debug-next-turn-btn" class="px-6 py-3 bg-pink-500 text-white font-semibold rounded-md hover:bg-pink-600 transition-colors duration-200 shadow-lg hidden ml-2">次へ（デバッグ）</button>
+                <button id="reset-game-btn" class="px-6 py-3 bg-gray-400 text-white font-semibold rounded-md hover:bg-gray-500 transition-colors duration-200 shadow-lg hidden">ゲームをリセット</button>
+            </div>
+            <div id="simulation-loading" class="flex flex-col items-center mt-4 hidden">
+                <div class="animate-spin rounded-full h-10 w-10 border-t-4 border-b-4 border-amber-600 mb-2"></div>
+                <span class="text-amber-700 font-semibold">参加者を呼んでいます...</span>
+            </div>
+        </header>
+        <main class="md:grid md:grid-cols-12 md:gap-8">
+            <aside class="md:col-span-3 mb-8 md:mb-0">
+                <div class="sticky top-8 bg-white/50 backdrop-blur-sm p-4 rounded-lg border border-stone-200">
+                    <h3 class="font-bold mb-4 text-stone-700">ゲーム進行</h3>
+                    <ul id="timeline" class="space-y-2"></ul>
+                </div>
+            </aside>
+            <div class="md:col-span-9" id="main-content-area">
+                <section id="section-rules" class="mb-12 hidden fade-in">
+                    <h3 class="text-2xl font-bold mb-4 text-stone-800 border-b-2 border-amber-300 pb-2">BIBLIOMIX ゲームルール</h3>
+                    <div class="bg-white p-6 rounded-lg shadow-md">
+                        <h4 class="text-xl font-bold text-stone-700 mb-4">目的</h4>
+                        <p class="mb-4 text-stone-600">このゲームは、異なるジャンルの本のエッセンス（概要と核心概念）を組み合わせ、深い議論を通じて「知の化学反応」を起こし、中央に提示された「問い」に対する新しい洞察や結論を導き出すことを目的とします。</p>
+                        <h4 class="text-xl font-bold text-stone-700 mb-4">ゲームの流れ（フェーズ）</h4>
+                        <ul class="list-disc pl-5 mb-4 text-stone-600 space-y-2">
+                            <li><b>フェーズ1：エッセンスカードの提示と問いかけの設定</b>
+                                <ul class="list-circle pl-5 mt-1 space-y-1">
+                                    <li>各プレイヤーは、自分の持参した本（マイ・エッセンスカード）を提示し、その本の核となる概念を説明します。</li>
+                                    <li>他のプレイヤーはその本の概念と「中央の問い」を関連付けて質問を投げかけます。</li>
+                                    <li>ファシリテーターは、投げかけられた質問の中から最も議論を深めそうなものを「問いかけ」として決定します。</li>
+                                    <li>ターン2の開始時には「化学反応の方向」カードが1枚引かれ、そのターンに提示されるエッセンスカードの方向性を示します。</li>
+                                    <li>フェーズ1の3ターン目は、手札に合うカードがない場合、提示をスキップすることができます。この場合、そのプレイヤーはセレンディピティを発動する選択肢があります。</li>
+                                    <li>「セレンディピティ」を発動すると、山札から新たなエッセンスカードを1枚引きます。さらに、新たな「化学反応の方向」カードを1枚引き、それが直ちに場の「方向性」として適用されます。</li>
+                                </ul>
+                            </li>
+                            <li><b>フェーズ2：チームディスカッション</b>
+                                <ul class="list-circle pl-5 mt-1 space-y-1">
+                                    <li>フェーズ1で設定された各「問いかけ」と、場に出ている全てのエッセンスカード、そして中央の問いを基に、プレイヤー全員で自由に議論を深めます。</li>
+                                    <li>ここでは、異なる概念や視点が結びつき、「知の化学反応」を起こすことが重要です。</li>
+                                </ul>
+                            </li>
+                            <li><b>フェーズ3：結論の言語化と可視化</b>
+                                <ul class="list-circle pl-5 mt-1 space-y-1">
+                                    <li>チームディスカッションで得られた洞察を統合し、中央の問いに対する最終的な結論を言語化します。</li>
+                                    <li>議論中に生まれた主要な概念間の繋がりが「知の化学反応マップ」として可視化されます。</li>
+                                </ul>
+                            </li>
+                        </ul>
+                        <h4 class="text-xl font-bold text-stone-700 mb-4">カードの種類</h4>
+                        <ul class="list-disc pl-5 mb-4 text-stone-600 space-y-2">
+                            <li><b>マイ・エッセンスカード</b>: 各プレイヤーがゲーム開始時に持参する、最も得意な本のエッセンス。</li>
+                            <li><b>エッセンスカード</b>: 山札から引かれる、様々な本のエッセンス。</li>
+                            <li><b>化学反応の方向カード</b>: 議論の方向性を示すカード。特定のターン開始時に引かれ、そのターンのプレイヤーは、この方向性に沿ったエッセンスカードを提示するよう努めます。</li>
+                        </ul>
+                    </div>
+                </section>
+                <section id="section-intro" class="fade-in hidden">
+                    <!-- ...参加者内容... -->
+                </section>
+                <div id="game-board-container" class="hidden">
+                    <div class="flex flex-col gap-6">
+                        <section id="section-board" class="w-full">
+                            <h3 class="text-2xl font-bold mb-4 text-stone-800 border-b-2 border-amber-300 pb-2">場のカード</h3>
+                            <p id="board-intro" class="mb-6 text-stone-600"></p>
+                            <div id="board-cards" class="flex flex-row gap-4 overflow-x-auto p-4 bg-white rounded-lg border border-stone-200 whitespace-nowrap"></div>
+                        </section>
+                        <section id="section-dialogue" class="w-full max-h-[55vh] overflow-y-auto">
+                            <h3 class="text-2xl font-bold mb-4 text-stone-800 border-b-2 border-amber-300 pb-2">対話ログ</h3>
+                            <button id="summarize-dialogue-btn" class="mb-4 px-4 py-2 bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-colors duration-200 shadow-md">対話を要約 ✨</button>
+                            <div id="summary-loading" class="hidden text-amber-700 mb-4">要約を生成中...</div>
+                            <div id="dialogue-summary" class="hidden p-4 bg-amber-50 rounded-lg border border-amber-200 mb-4">
+                                <h4 class="font-bold text-amber-800 mb-2">対話要約</h4>
+                                <p id="summary-content" class="text-stone-700 whitespace-pre-line"></p>
+                                <button id="close-summary-btn" class="mt-4 px-3 py-1 bg-stone-200 text-stone-700 rounded-md hover:bg-stone-300 transition-colors duration-200 text-sm">閉じる</button>
+                            </div>
+                            <div id="dialogue-content" class="space-y-4 p-4 bg-white rounded-lg border border-stone-200 max-h-[65vh] overflow-y-auto"></div>
+                        </section>
+                    </div>
+                </div>
+                <section id="section-synthesis" class="fade-in hidden">
+                    <!-- ...結論・マップ... -->
+                </section>
+            </div>
+        </main>
+    </div>
+    <!-- 概念拡張ポップアップ -->
+    <div id="concept-popup" class="concept-popup hidden">
+        <div class="flex justify-between items-center mb-2">
+            <span id="popup-concept-title" class="font-bold text-lg"></span>
+            <button id="close-popup-btn" class="ml-4 px-3 py-1 bg-stone-200 text-stone-700 rounded-md hover:bg-stone-300 transition-colors duration-200 text-sm">閉じる</button>
+        </div>
+        <div id="popup-loading" class="hidden text-amber-700 mb-2">生成中...</div>
+        <div id="popup-content" class="concept-popup-content"></div>
+        <button id="expand-concept-btn" class="mt-4 px-4 py-2 bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-colors duration-200 shadow-md">議論を発展 ✨</button>
+    </div>
+    <footer>
+        <p>&copy; 2023 BIBLIOMIX</p>
+    </footer>
+    <script type="module" src="assets/js/main.js"></script>
+</body>
+</html>
