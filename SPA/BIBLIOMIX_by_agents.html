@@ -1,0 +1,1584 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BIBLIOMIX: AIエージェントの知の化学反応 シミュレーション</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Noto Sans JP', sans-serif; background-color: #FDFBF8; }
+        .card { transition: all 0.3s ease; }
+        .card:hover { transform: translateY(-5px) scale(1.02); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); }
+        .timeline-item.active { background-color: #F0EAD6; border-left-color: #D4A056; }
+        .fade-in { animation: fadeIn 0.7s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .chart-container { position: relative; width: 100%; max-width: 800px; margin-left: auto; margin-right: auto; height: 400px; max-height: 60vh; }
+        @media (min-width: 768px) { .chart-container { height: 500px; } }
+
+        /* ジャンル色分け */
+        /* カード全体の背景は白、枠線のみ色付け */
+        .genre-philosophy { border-color: #FBCFE8; } /* Fuchsia */
+        .genre-sociology { border-color: #D9F99D; } /* Lime */
+        .genre-science { border-color: #BFDBFE; } /* Cyan */
+        .genre-literature { border-color: #FECDD3; } /* Rose */
+        .genre-environment { border-color: #A7F3D0; } /* Emerald */
+        .genre-business { border-color: #C4B5FD; } /* Violet */
+        .genre-history { border-color: #FDE68A; } /* Yellow */
+        .genre-cooking { border-color: #FED7AA; } /* Orange */
+        .genre-game { border-color: #BFDBFE; } /* Sky Blue as general tech/game */
+        .genre-economics { border-color: #BFDBFE; } /* Blue Gray for economics */
+        
+        /* ジャンルタグの背景色と文字色 */
+        .tag-philosophy { background-color: #FCE7F3; color: #BE185D; }
+        .tag-sociology { background-color: #ECFCCB; color: #65A30D; }
+        .tag-science { background-color: #E0F2FE; color: #0284C7; }
+        .tag-literature { background-color: #FFF1F2; color: #E11D48; }
+        .tag-environment { background-color: #ECFDF5; color: #059669; }
+        .tag-business { background-color: #EDE9FE; color: #7C3AED; }
+        .tag-history { background-color: #FFFBEB; color: #D97706; }
+        .tag-cooking { background-color: #FFF7ED; color: #EA580C; }
+        .tag-game { background-color: #E0F2FE; color: #0284C7; }
+        .tag-economics { background-color: #F0F9FF; color: #0C4A6E; }
+
+        /* コンセプト拡張ポップアップのスタイル */
+        .concept-popup {
+            width: 100%;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            padding: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 1000;
+            margin-top: 2rem;
+            display: none;
+        }
+        .concept-popup.show {
+            display: block;
+        }
+        .concept-popup-content {
+            max-height: 250px;
+            overflow-y: auto;
+            margin-top: 8px;
+            padding-right: 5px;
+            font-size: 0.9em;
+            color: #555;
+        }
+        /* 中央の問いのオーバーレイ */
+        #central-question-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 12px 20px;
+            border-radius: 8px;
+            border: 2px solid #D4A056;
+            text-align: center;
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #7A5B2E;
+            z-index: 500;
+            pointer-events: none;
+            white-space: nowrap;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #D4A056;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* ...既存... */
+        #board-cards .card {
+            min-width: 0;
+            max-width: 320px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        @media (min-width: 768px) {
+            #board-cards {
+                grid-template-columns: 1fr;
+            }
+        }
+        @media (min-width: 1024px) {
+            #board-cards {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+    </style>
+</head>
+<body class="text-stone-800">
+
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="text-center mb-8 md:mb-12">
+            <h1 class="text-3xl md:text-4xl font-bold text-stone-900">BIBLIOMIX</h1>
+            <h2 class="text-xl md:text-2xl font-light text-amber-800/80 mt-2">AIエージェントの知の化学反応 シミュレーション</h2>
+            <div class="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg max-w-3xl mx-auto">
+                <p class="text-lg font-semibold text-stone-800">中央の問い</p>
+                <p class="text-2xl md:text-3xl font-bold mt-2 text-amber-900" id="main-central-question"></p>
+            </div>
+            <div class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg max-w-xl mx-auto" id="api-key-section">
+                <label for="gemini-api-key" class="block text-sm font-medium text-blue-800 mb-2">Gemini APIキーを入力してください:</label>
+                <input type="password" id="gemini-api-key" class="w-full p-2 border border-blue-300 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="your-gemini-api-key-here">
+                <button id="save-api-key-btn" class="mt-3 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-200 shadow-md">APIキーを保存</button>
+                <p id="api-key-status" class="mt-2 text-sm text-green-700 hidden">APIキーが保存されました！</p>
+            </div>
+            <div id="game-controls" class="mt-6 flex justify-center gap-4 hidden">
+                <button id="start-simulation-btn" class="px-6 py-3 bg-amber-600 text-white font-semibold rounded-md hover:bg-amber-700 transition-colors duration-200 shadow-lg">シミュレーション開始</button>
+                <button id="next-turn-btn" class="px-6 py-3 bg-teal-600 text-white font-semibold rounded-md hover:bg-teal-700 transition-colors duration-200 shadow-lg hidden">次へ</button>
+                <button id="reset-game-btn" class="px-6 py-3 bg-gray-400 text-white font-semibold rounded-md hover:bg-gray-500 transition-colors duration-200 shadow-lg hidden">ゲームをリセット</button>
+            </div>
+        </header>
+
+        <main class="md:grid md:grid-cols-12 md:gap-8">
+            <aside class="md:col-span-3 mb-8 md:mb-0">
+              <div class="sticky top-8 bg-white/50 backdrop-blur-sm p-4 rounded-lg border border-stone-200">
+                <h3 class="font-bold mb-4 text-stone-700">ゲーム進行</h3>
+                <ul id="timeline" class="space-y-2"></ul>
+              </div>
+            </aside>
+          
+            <div class="md:col-span-9" id="main-content-area">
+              <section id="section-rules" class="mb-12 hidden fade-in">
+                <h3 class="text-2xl font-bold mb-4 text-stone-800 border-b-2 border-amber-300 pb-2">BIBLIOMIX ゲームルール</h3>
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                        <h4 class="text-xl font-bold text-stone-700 mb-4">目的</h4>
+                        <p class="mb-4 text-stone-600">このゲームは、異なるジャンルの本のエッセンス（概要と核心概念）を組み合わせ、深い議論を通じて「知の化学反応」を起こし、中央に提示された「問い」に対する新しい洞察や結論を導き出すことを目的とします。</p>
+                        <h4 class="text-xl font-bold text-stone-700 mb-4">ゲームの流れ（フェーズ）</h4>
+                        <ul class="list-disc pl-5 mb-4 text-stone-600 space-y-2">
+                            <li><b>フェーズ1：エッセンスカードの提示と問いかけの設定</b>
+                                <ul class="list-circle pl-5 mt-1 space-y-1">
+                                    <li>各プレイヤーは、自分の持参した本（マイ・エッセンスカード）を提示し、その本の核となる概念を説明します。</li>
+                                    <li>他のプレイヤーはその本の概念と「中央の問い」を関連付けて質問を投げかけます。</li>
+                                    <li>ファシリテーターは、投げかけられた質問の中から最も議論を深めそうなものを「問いかけ」として決定します。</li>
+                                    <li>ターン2の開始時には「化学反応の方向」カードが1枚引かれ、そのターンに提示されるエッセンスカードの方向性を示します。</li>
+                                    <li>フェーズ1の3ターン目は、手札に合うカードがない場合、提示をスキップすることができます。この場合、そのプレイヤーはセレンディピティを発動する選択肢があります。</li>
+                                    <li>「セレンディピティ」を発動すると、山札から新たなエッセンスカードを1枚引きます。さらに、新たな「化学反応の方向」カードを1枚引き、それが直ちに場の「方向性」として適用されます。</li>
+                                </ul>
+                            </li>
+                            <li><b>フェーズ2：チームディスカッション</b>
+                                <ul class="list-circle pl-5 mt-1 space-y-1">
+                                    <li>フェーズ1で設定された各「問いかけ」と、場に出ている全てのエッセンスカード、そして中央の問いを基に、プレイヤー全員で自由に議論を深めます。</li>
+                                    <li>ここでは、異なる概念や視点が結びつき、「知の化学反応」を起こすことが重要です。</li>
+                                </ul>
+                            </li>
+                            <li><b>フェーズ3：結論の言語化と可視化</b>
+                                <ul class="list-circle pl-5 mt-1 space-y-1">
+                                    <li>チームディスカッションで得られた洞察を統合し、中央の問いに対する最終的な結論を言語化します。</li>
+                                    <li>議論中に生まれた主要な概念間の繋がりが「知の化学反応マップ」として可視化されます。</li>
+                                </ul>
+                            </li>
+                        </ul>
+                        <h4 class="text-xl font-bold text-stone-700 mb-4">カードの種類</h4>
+                        <ul class="list-disc pl-5 mb-4 text-stone-600 space-y-2">
+                            <li><b>マイ・エッセンスカード</b>: 各プレイヤーがゲーム開始時に持参する、最も得意な本のエッセンス。</li>
+                            <li><b>エッセンスカード</b>: 山札から引かれる、様々な本のエッセンス。</li>
+                            <li><b>化学反応の方向カード</b>: 議論の方向性を示すカード。特定のターン開始時に引かれ、そのターンのプレイヤーは、この方向性に沿ったエッセンスカードを提示するよう努めます。</li>
+                        </ul>
+                    </div>
+                </section>
+                <section id="section-intro" class="fade-in hidden">
+                    <!-- ...参加者内容... -->
+                </section>
+                <div id="game-board-container" class="hidden">
+                    <div class="flex flex-col md:flex-row gap-6">
+                      <section id="section-board" class="w-full md:w-2/5 max-h-[70vh] overflow-y-auto">
+                        <h3 class="text-2xl font-bold mb-4 text-stone-800 border-b-2 border-amber-300 pb-2">場のカード</h3>
+                        <p id="board-intro" class="mb-6 text-stone-600"></p>
+                        <div id="board-cards" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+                      </section>
+                      <section id="section-dialogue" class="w-full md:w-3/5 max-h-[70vh] overflow-y-auto">
+                        <h3 class="text-2xl font-bold mb-4 text-stone-800 border-b-2 border-amber-300 pb-2">対話ログ</h3>
+                        <button id="summarize-dialogue-btn" class="mb-4 px-4 py-2 bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-colors duration-200 shadow-md">対話を要約 ✨</button>
+                        <div id="summary-loading" class="hidden text-amber-700 mb-4">要約を生成中...</div>
+                        <div id="dialogue-summary" class="hidden p-4 bg-amber-50 rounded-lg border border-amber-200 mb-4">
+                          <h4 class="font-bold text-amber-800 mb-2">対話要約</h4>
+                          <p id="summary-content" class="text-stone-700 whitespace-pre-line"></p>
+                          <button id="close-summary-btn" class="mt-4 px-3 py-1 bg-stone-200 text-stone-700 rounded-md hover:bg-stone-300 transition-colors duration-200 text-sm">閉じる</button>
+                        </div>
+                        <div id="dialogue-content" class="space-y-4 p-4 bg-white rounded-lg border border-stone-200 max-h-[60vh] overflow-y-auto"></div>
+                      </section>
+                    </div>
+                  </div>
+                  <section id="section-synthesis" class="fade-in hidden">
+                    <!-- ...結論・マップ... -->
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- 概念拡張ポップアップ -->
+    <div id="concept-popup" class="concept-popup hidden">
+        <div class="flex justify-between items-center mb-2">
+            <span id="popup-concept-title" class="font-bold text-lg"></span>
+            <button id="close-popup-btn" class="ml-4 px-3 py-1 bg-stone-200 text-stone-700 rounded-md hover:bg-stone-300 transition-colors duration-200 text-sm">閉じる</button>
+        </div>
+        <div id="popup-loading" class="hidden text-amber-700 mb-2">生成中...</div>
+        <div id="popup-content" class="concept-popup-content"></div>
+        <button id="expand-concept-btn" class="mt-4 px-4 py-2 bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-colors duration-200 shadow-md">議論を発展 ✨</button>
+    </div>
+
+<script>
+let API_KEY = '';
+
+// プレイヤー名・役割・ペルソナのハードコーディングは廃止
+
+const allAvailableEssenceCards = [
+    // ジャンル別エッセンスカード (約40種類を代表として記載)
+    // 哲学
+    { id: 'ihoujin', title: '異邦人', author: 'アルベール・カミュ', publicationYear: 1942, genre: '哲学', description: '不条理な世界における人間の『<b>実存</b>』と、<b>感情</b>や<b>論理</b>が意味を持たない状況での<b>自由</b>と<b>責任</b>を問いかけます。<br>核心概念：<ul><li><b>不条理</b>: 世界や人生に内在する、無意味で理解不能な側面。</li><li><b>実存</b>: 個人の具体的な存在であり、その自由と責任。</li><li><b>感情の欠如</b>: 社会的規範や期待からの逸脱。</li><li><b>自由と責任</b>: 不条理な世界で自らの選択を行うこと。</li></ul>' },
+    { id: 'sophies_world', title: 'ソフィーの世界', author: 'ヨースタイン・ゴルデル', publicationYear: 1991, genre: '哲学', description: '少女ソフィーが謎の哲学教師から送られてくる手紙を通じて、哲学の歴史と主要な概念を学ぶ物語。<b>存在</b>、<b>真実</b>、<b>意識</b>について考えるきっかけを与えます。<br>核心概念：<ul><li><b>存在</b>: 我々がなぜここにいるのかという根本的な問い。</li><li><b>真実</b>: 客観的認識と主観的認識の探求。</li><li><b>意識</b>: 自己と世界の認識。</li></ul>' },
+    { id: 'beyond_good_evil', title: '善悪の彼岸', author: 'フリードリヒ・ニーチェ', publicationYear: 1886, genre: '哲学', description: '従来の道徳観を批判し、新しい価値観の創造を提唱。<b>力への意志</b>、<b>永劫回帰</b>、<b>超人</b>といった概念を通じて、人間の可能性を深く掘り下げます。<br>核心概念：<ul><li><b>力への意志</b>: 生きとし生けるものの根源的な衝動。</li><li><b>価値の転換</b>: 既存の道徳や規範の批判と乗り越え。</li><li><b>超人</b>: 自己を克服し、新しい価値を創造する人間像。</li></ul>' },
+    { id: 'meditations', title: '幸福論', author: 'アラン', publicationYear: 1925, genre: '哲学', description: '日々の生活における<b>幸福</b>をテーマに、いかにして幸福を見出し、維持するかを哲学的に考察します。<b>意志</b>、<b>習慣</b>、<b>思考の選択</b>が重要です。<br>核心概念：<ul><li><b>幸福の選択</b>: 幸福は状況ではなく、心の持ち方で決まる。</li><li><b>意志の力</b>: 困難に立ち向かい、幸福を追求する力。</li><li><b>習慣の形成</b>: 幸福な状態を保つための日々の実践。</li></ul>' },
+    // 科学
+    { id: 'sapiens', title: 'サピエンス全史', author: 'ユヴァル・ノア・ハラリ', publicationYear: 2014, genre: '科学', description: '人類が地球を支配するに至った歴史を、<b>認知革命</b>、<b>農業革命</b>、<b>科学革命</b>という視点から読み解き、<b>虚構</b>の力が人類社会を形成したと説きます。<br>核心概念：<ul><li><b>認知革命</b>: 虚構を信じる能力が人類の発展を促した。</li><li><b>集団的協力</b>: 虚構によって大規模な協力が可能になった。</li><li><b>未来の予測</b>: 人類が自らの運命を左右しうる可能性。</li></ul>' },
+    { id: 'cosmos', title: 'コスモス', author: 'カール・セーガン', publicationYear: 1980, genre: '科学', description: '宇宙の壮大さと科学の魅力を一般に紹介。<b>科学的探求</b>、<b>宇宙の起源</b>、<b>生命の進化</b>を通じて、人間の知的好奇心を刺激します。<br>核心概念：<ul><li><b>宇宙のスケール</b>: 広大な宇宙における地球と生命の位置づけ。</li><li><b>科学的方法</b>: 知識を獲得し、誤りを訂正するプロセス。</li><li><b>知的好奇心</b>: 宇宙と生命の謎を探求する人間の根源的な欲求。</li></ul>' },
+    { id: 'genes', title: '遺伝子とは何か', author: 'シッダールタ・ムカジー', publicationYear: 2016, genre: '科学', description: '遺伝子の歴史、その発見から現代の遺伝子工学までを追跡。<b>遺伝</b>、<b>進化</b>、<b>アイデンティティ</b>が人間の運命にどう影響するかを考察します。<br>核心概念：<ul><li><b>遺伝情報</b>: 生命の設計図としての遺伝子。</li><li><b>ゲノム編集</b>: 遺伝子を操作する技術と倫理的課題。</li><li><b>自己と運命</b>: 遺伝子が個人のアイデンティティと運命に与える影響。</li></ul>' },
+    { id: 'silent_spring', title: '沈黙の春', author: 'レイチェル・カーソン', publicationYear: 1962, genre: '環境', description: 'DDTなどの化学物質が環境に与える悪影韵を告発し、環境保護運動のきっかけとなった。<b>生態系</b>、<b>持続可能性</b>、<b>人間と自然の共生</b>の重要性を訴えます。<br>核心概念：<ul><li><b>生態系の連鎖</b>: 自然界の繊細なバランス。</li><li><b>化学物質汚染</b>: 人為的な環境破壊。</li><li><b>持続可能性</b>: 環境を守りながら発展する社会。</li></ul>' },
+    // 文学
+    { id: 'norwegian_wood', title: 'ノルウェイの森', author: '村上春樹', publicationYear: 1987, genre: '文学', description: '喪失と再生、<b>生と死</b>、<b>孤独</b>と<b>愛</b>をテーマに、若者の複雑な心情を描写。現代社会における人間の脆弱性と強さを探ります。<br>核心概念：<ul><li><b>喪失と再生</b>: 悲しみを乗り越え、再び生きる意味を見出すプロセス。</li><li><b>孤独と繋がり</b>: 人間関係の希薄さと、深い絆への希求。</li><li><b>青春の彷徨</b>: 自己を探し求める時期の苦悩と成長。</li></ul>' },
+    { id: 'great_gatsby', title: 'グレート・ギャツビー', author: 'F.スコット・フィッツジェラルド', publicationYear: 1925, genre: '文学', description: 'アメリカン・ドリームの光と影を描き、<b>富</b>、<b>夢</b>、<b>理想</b>、そして<b>過去への執着</b>が個人の幸福にどう影響するかを考察します。<br>核心概念：<ul><li><b>アメリカン・ドリーム</b>: 努力によって成功を掴むという神話と現実。</li><li><b>理想と現実</b>: 追い求める夢と、それが叶わない時の絶望。</li><li><b>過去への執着</b>: 過去の幻影に囚われることの悲劇。</li></ul>' },
+    { id: 'crime_punishment', title: '罪と罰', author: 'フョードル・ドストエフスキー', publicationYear: 1866, genre: '文学', description: '犯罪を犯した学生の心理と、<b>良心</b>、<b>罪悪感</b>、<b>許し</b>、そして<b>信仰</b>による救済を描きます。人間の内面的な葛藤と倫理を深く掘り下げます。<br>核心概念：<ul><li><b>罪と罰</b>: 倫理的選択とその結果。</li><li><b>良心</b>: 内なる道徳的な声。</li><li><b>救済</b>: 苦悩の先にある精神的な解放。</li></ul>' },
+    { id: 'kafka_on_shore', title: '海辺のカフカ', author: '村上春樹', publicationYear: 2002, genre: '文学', description: '現実と非現実が交錯する世界で、少年が自分探しの旅に出る。<b>宿命</b>、<b>自由意志</b>、<b>無意識</b>、そして<b>物語の力</b>が、個人のアイデンティティ形成にどう影響するかを探ります。<br>核心概念：<ul><li><b>運命と選択</b>: 人間の運命は定められているのか、それとも選択によって変わるのか。</li><li><b>深層意識</b>: 夢や無意識の領域が現実と交錯する。</li><li><b>自己発見</b>: 旅を通じて自分自身を見つけ出すプロセス。</li></ul>' },
+    // ビジネス
+    { id: 'shikou_no_seirigaku', title: '思考の整理学', author: '外山滋比古', publicationYear: 1986, genre: 'ビジネス', description: '知識を効率的に増やし、アイデアを生み出すための<b>思考法</b>や<b>情報整理術</b>について、独自の視点から解説した知的生産術の古典です。<br>核心概念：<ul><li><b>知的生産</b>: 知識を獲得し、新たなアイデアや成果を生み出すプロセス。</li><li><b>情報整理</b>: 効率的な情報の管理と活用。</li><li><b>忘却の効用</b>: 不要な情報を忘れ去ることが、新たな思考を促す効果。</li><li><b>アイデア発想</b>: 異なる情報や概念を組み合わせ、斬新な発想を生み出す方法。</li></ul>' },
+    { id: '7_habits', title: '7つの習慣', author: 'スティーブン・R・コヴィー', publicationYear: 1989, genre: 'ビジネス', description: '個人の<b>人格</b>と<b>原則</b>に基づいた効果的な生き方を説き、<b>主体性</b>、<b>目的</b>、<b>優先順位</b>、<b>相互依存</b>といった概念を提示します。<br>核心概念：<ul><li><b>主体性</b>: 自らの人生に責任を持ち、選択を行うこと。</li><li><b>習慣</b>: 意識的な行動が人格形成に与える影響。</li><li><b>原則</b>: 普遍的な成功法則と倫理的基盤。</li><li><b>相互依存</b>: 他者との協力関係によるより大きな成果。</li></ul>' },
+    { id: 'startup_lean', title: 'リーン・スタートアップ', author: 'エリック・リース', publicationYear: 2011, genre: 'ビジネス', description: '新しい製品やサービスを開発する際の無駄をなくし、効率的に事業を立ち上げるための方法論。<b>仮説検証</b>、<b>MVP (最小実行可能製品)</b>、<b>学習</b>の重要性を説きます。<br>核心概念：<ul><li><b>迅速な仮説検証</b>: アイデアを素早く試し、市場の反応から学ぶ。</li><li><b>継続的学習</b>: 失敗から学び、改善を繰り返す。</li><li><b>最小実行可能製品 (MVP)</b>: 必要最小限の機能で製品をリリースし、フィードバックを得る。</li></ul>' },
+    { id: 'principles', title: 'プリンシプルズ', author: 'レイ・ダリオ', publicationYear: 2017, genre: 'ビジネス', description: 'ブリッジウォーター・アソシエイツの創設者が、自身の成功と失敗から学んだ人生と仕事における<b>原則</b>を体系化。<b>徹底的な透明性</b>、<b>メリットクラシー</b>、<b>客観性</b>の重要性を説きます。<br>核心概念：<ul><li><b>原理原則</b>: あらゆる状況に適用できる普遍的な真理。</li><li><b>徹底的な透明性</b>: 隠し事なく事実を共有し、意見をぶつけ合う文化。</li><li><b>メリットクラシー</b>: 能力主義に基づき、最高のアイデアが勝つ組織。</li></ul>' },
+    // 歴史
+    { id: 'guns_germs_steel', title: '銃・病原菌・鉄', author: 'ジャレド・ダイアモンド', publicationYear: 1997, genre: '歴史', description: '人類社会の発展の不均一性を、地理的・環境的要因から解き明かす。<b>地理的決定論</b>、<b>食料生産</b>、<b>病原菌</b>、<b>技術革新</b>が文明の興亡にどう影響したかを考察。<br>核心概念：<ul><li><b>環境の力</b>: 地理や自然環境が人類社会の発展を規定した。</li><li><b>食料生産</b>: 定住と人口増加、専門化の基礎。</li><li><b>技術伝播</b>: 知識や技術の地理的・文化的な広がり。</li></ul>' },
+    { id: 'homo_deus', title: 'ホモ・デウス', author: 'ユヴァル・ノア・ハラリ', publicationYear: 2016, genre: '歴史', description: '『サピエンス全史』の続編。21世紀の人類が追求する「不死」「幸福」「神性」の未来を描き、<b>データ至上主義</b>、<b>アルゴリズム支配</b>、<b>テクノロジーと倫理</b>を考察。<br>核心概念：<ul><li><b>データ至上主義</b>: データが新しい宗教となる未来。</li><li><b>アルゴリズム支配</b>: 人間の意思決定がアルゴリズムに委ねられる。</li><li><b>ポスト・ヒューマン</b>: テクノロジーによって人間性が変容する可能性。</li></ul>' },
+    // 料理
+    { id: 'salt_fat_acid_heat', title: 'ソルト・ファット・アシッド・ヒート', author: 'サミン・ノスラット', publicationYear: 2017, genre: '料理', description: '料理の基本要素である<b>塩</b>、<b>脂肪</b>、<b>酸</b>、<b>熱</b>を理解することで、あらゆる料理を美味しく作れるようになるという哲学を説きます。<b>基本の重要性</b>と<b>直感的な創造性</b>を育みます。<br>核心概念：<ul><li><b>料理の基本原則</b>: 食材を美味しくするための普遍的な要素。</li><li><b>味覚のバランス</b>: 塩味、脂味、酸味、熱の調和。</li><li><b>創造性と直感</b>: レシピを超えた自由な発想。</li></ul>' },
+    // ゲーム
+    { id: 'game_design_book', title: 'ゲームデザインの教科書', author: 'ジェシー・シェラー', publicationYear: 2008, genre: 'ゲーム', description: 'ゲームデザインの原理と実践について解説。<b>プレイヤー体験</b>、<b>ルールとメカニクス</b>、<b>フィードバックループ</b>が、魅力的なゲームを創り出す上でどう重要かを考察します。<br>核心概念：<ul><li><b>プレイヤー体験</b>: ユーザーがゲームを通して得る感情と感覚。</li><li><b>ゲームバランス</b>: 公平性と挑戦性の適切な設計。</li><li><b>報酬と動機付け</b>: プレイヤーを行動に駆り立てる仕組み。</li></ul>' },
+    // その他、多様なジャンルを表現するための追加カード
+    { id: 'wabisabi', title: 'デザインの日本的思考「わび・さび」', author: 'レオナード・コーレン', publicationYear: 1994, genre: '芸術', description: '日本の伝統的な美意識である「わび・さび」を、西洋の視点から解説。<b>不完全さ</b>、<b>無常観</b>、<b>質素</b>の中に美を見出すことを探ります。<br>核心概念：<ul><li><b>不完全の美</b>: 欠点や経年変化を美として捉える。</li><li><b>無常</b>: 全てのものは移ろいゆくという認識。</li><li><b>質素と簡素</b>: 無駄を削ぎ落とした美。</li></ul>' },
+    { id: 'flow', title: 'フロー体験 喜びの現象学', author: 'ミハイ・チクセントミハイ', publicationYear: 1990, genre: '心理学', description: '人が活動に深く没頭し、時間感覚を忘れる「フロー体験」を科学的に分析。<b>挑戦とスキルのバランス</b>、<b>集中</b>、<b>目的意識</b>が幸福にどう影響するかを考察します。<br>核心概念：<ul><li><b>フロー状態</b>: 高い集中と没頭が生み出す至福の体験。</li><li><b>挑戦とスキル</b>: 適度な難易度がフローを促す。</li><li><b>自己目的性</b>: 行動そのものが喜びとなる。</li></ul>' },
+    { id: 'thinking_fast_slow', title: 'ファスト&スロー', author: 'ダニエル・カーネマン', publicationYear: 2011, genre: '心理学', description: '人間の思考を「システム1（速い、直感的）」と「システム2（遅い、分析的）」に分け、それぞれが意思決定にどう影響するかを解説。<b>認知バイアス</b>と<b>合理性</b>の限界を明らかにします。<br>核心概念：<ul><li><b>二重思考システム</b>: 直感と熟慮の異なる思考モード。</li><li><b>ヒューリスティック</b>: 簡略化された意思決定の法則。</li><li><b>認知エラー</b>: 思考の落とし穴とその克服。</li></ul>' },
+    { id: 'why_nations_fail', title: '国家はなぜ衰退するのか', author: 'ダロン・アセモグル, ジェイムズ・A・ロビンソン', publicationYear: 2012, genre: '経済学', description: '国家の繁栄と衰退を、<b>制度</b>（包括的・収奪的）、<b>政治</b>、<b>経済</b>の相互作用から説明。良い制度がイノベーションと成長を促すと説きます。<br>核心概念：<ul><li><b>包括的制度</b>: 広い参加と公正な競争を許容する制度。</li><li><b>収奪的制度</b>: 権力者が富を独占する制度。</li><li><b>政治と経済</b>: 相互に影響し合う国家発展の鍵。</li></ul>' },
+    { id: 'cosmos_human', title: '宇宙と人間', author: '湯川秀樹', publicationYear: 1968, genre: '科学', description: '物理学者湯川秀樹が、宇宙と人間の関係、科学の役割、そして未来について考察。<b>科学者の倫理</b>、<b>知識の限界</b>、<b>創造性</b>を問いかけます。<br>核心概念：<ul><li><b>科学の限界</b>: 科学が全てを解き明かせない領域。</li><li><b>知識と無知</b>: 探求の終わりなきプロセス。</li><li><b>人間の役割</b>: 宇宙における自己の位置づけと責任。</li></ul>' },
+    { id: 'invisible_city', title: '見えない都市', author: 'イタロ・カルヴィーノ', publicationYear: 1972, genre: '文学', description: '旅人マルコ・ポーロが、想像上の都市を語る形式で、<b>都市</b>、<b>記憶</b>、<b>欲望</b>、<b>想像力</b>といったテーマを探る。都市の多義性と人間の知覚を考察。<br>核心概念：<ul><li><b>都市の多様性</b>: 物理的な構造と人々の記憶や感情が織りなす空間。</li><li><b>記憶と忘却</b>: 経験が都市の認識を形作る。</li><li><b>想像力</b>: 現実を再構築し、新しい意味を生み出す力。</li></ul>' },
+    { id: 'power_of_habit', title: '習慣の力', author: 'チャールズ・デュヒッグ', publicationYear: 2012, genre: 'ビジネス', description: '個人の生活から大企業、社会運動まで、<b>習慣</b>がいかに形成され、人生やビジネスに大きな影響を与えるかを解き明かします。<b>習慣のループ</b>、<b>変化</b>、<b>意志力</b>について。<br>核心概念：<ul><li><b>習慣のループ</b>: きっかけ、ルーチン、報酬からなる習慣のサイクル。</li><li><b>習慣の変革</b>: ループを理解し、意識的に行動を変える。</li><li><b>意志力</b>: 目標達成のための自己制御能力。</li></ul>' },
+    { id: 'thinking_architecture', title: '考える建築', author: 'ピーター・ズントー', publicationYear: 2006, genre: '芸術', description: 'スイスの建築家が自身の建築哲学を語る。<b>雰囲気</b>、<b>物質性</b>、<b>記憶</b>が建築空間を形成し、人々の感情に訴えかけることを考察。<b>場と経験</b>の重要性を説きます。<br>核心概念：<ul><li><b>場の感覚</b>: 空間が持つ独特の雰囲気と影響力。</li><li><b>物質の詩学</b>: 素材が持つ意味と感情。</li><li><b>建築と感情</b>: 空間が人々の記憶や感情を呼び起こす。</li></ul>' },
+];
+
+const directionCards = [
+    { id: 'direction_past_future', type: 'direction', title: '過去から未来を読み解け！' },
+    { id: 'direction_daily_beauty', type: 'direction', title: '日常の美を見出せ！' },
+    { id: 'direction_paradox_truth', type: 'direction', title: '矛盾の中に真理を見出せ！' },
+    { id: 'direction_connect_divide', type: 'direction', title: '繋がりと分断を考察せよ！' },
+];
+
+const genreColors = {
+    '哲学': { cardBorder: 'border-fuchsia-300', cardBg: 'bg-white', tagBg: 'bg-fuchsia-100', tagText: 'text-fuchsia-800', chartBg: 'rgba(252, 231, 243, 0.6)', chartBorder: 'rgba(251, 207, 232, 0.8)' },
+    '社会学': { cardBorder: 'border-lime-300', cardBg: 'bg-white', tagBg: 'bg-lime-100', tagText: 'text-lime-800', chartBg: 'rgba(236, 252, 203, 0.6)', chartBorder: 'rgba(217, 249, 157, 0.8)' },
+    '科学': { cardBorder: 'border-blue-300', cardBg: 'bg-white', tagBg: 'bg-blue-100', tagText: 'text-blue-800', chartBg: 'rgba(224, 242, 254, 0.6)', chartBorder: 'rgba(191, 219, 254, 0.8)' },
+    '文学': { cardBorder: 'border-rose-300', cardBg: 'bg-white', tagBg: 'bg-rose-100', tagText: 'text-rose-800', chartBg: 'rgba(255, 241, 242, 0.6)', chartBorder: 'rgba(254, 205, 211, 0.8)' },
+    '環境': { cardBorder: 'border-emerald-300', cardBg: 'bg-white', tagBg: 'bg-emerald-100', tagText: 'text-emerald-800', chartBg: 'rgba(236, 253, 245, 0.6)', chartBorder: 'rgba(167, 243, 208, 0.8)' },
+    'ビジネス': { cardBorder: 'border-violet-300', cardBg: 'bg-white', tagBg: 'bg-violet-100', tagText: 'text-violet-800', chartBg: 'rgba(237, 233, 254, 0.6)', chartBorder: 'rgba(196, 181, 253, 0.8)' },
+    '歴史': { cardBorder: 'border-yellow-300', cardBg: 'bg-white', tagBg: 'bg-yellow-100', tagText: 'text-yellow-800', chartBg: 'rgba(255, 251, 235, 0.6)', chartBorder: 'rgba(253, 230, 138, 0.8)' },
+    '料理': { cardBorder: 'border-orange-300', cardBg: 'bg-white', tagBg: 'bg-orange-100', tagText: 'text-orange-800', chartBg: 'rgba(255, 247, 237, 0.6)', chartBorder: 'rgba(254, 215, 170, 0.8)' },
+    'ゲーム': { cardBorder: 'border-sky-300', cardBg: 'bg-white', tagBg: 'bg-sky-100', tagText: 'text-sky-800', chartBg: 'rgba(224, 242, 254, 0.6)', chartBorder: 'rgba(191, 219, 254, 0.8)' },
+    '経済学': { cardBorder: 'border-blue-300', cardBg: 'bg-white', tagBg: 'bg-blue-100', tagText: 'text-blue-800', chartBg: 'rgba(240, 249, 255, 0.6)', chartBorder: 'rgba(191, 219, 254, 0.8)' },
+    '芸術': { cardBorder: 'border-pink-300', cardBg: 'bg-white', tagBg: 'bg-pink-100', tagText: 'text-pink-800', chartBg: 'rgba(253, 242, 248, 0.6)', chartBorder: 'rgba(249, 168, 212, 0.8)' },
+    '心理学': { cardBorder: 'border-purple-300', cardBg: 'bg-white', tagBg: 'bg-purple-100', tagText: 'text-purple-800', chartBg: 'rgba(243, 232, 255, 0.6)', chartBorder: 'rgba(215, 185, 255, 0.8)' }
+};
+
+let gameState = {
+    currentPhase: 0,
+    currentTurn: 0,
+    currentPlayerIndex: 0,
+    centralQuestion: "",
+    boardCards: [],
+    activeDirectionCard: null,
+    playerQuestions: {},
+    gameLog: [],
+    players: [], // プレイヤー配列（playerId, name, persona, ...）
+    phase2DiscussionRound: 0,
+    maxPhase2DiscussionRounds: 4,
+    finalConclusion: ""
+};
+
+// timelineConfig: 初期状態はbuildTimelineConfigの順番に合わせてダミー名で全ターン分を用意し、ゲーム開始後に本名に差し替え
+let timelineConfig = [
+    { id: 'game_rules', title: 'ゲームルール', phase: 0, turn: 0, section: 'section-rules' },
+    { id: 'intro', title: '参加者', phase: 0, turn: 0, section: 'section-intro' },
+    { id: 'p1_t1_start', title: 'フェーズ1-T1開始', phase: 1, turn: 0, section: 'game-board-container', intro: "フェーズ1、第1ターンが始まります。AIエージェント達が各自のマイ・エッセンスカードを提示し、中央の問いに対する独自の視点から質問を投げかけます。" },
+    { id: 'p1_t1_p1', title: 'プレイヤー1の番 (P1-T1)', phase: 1, turn: 1, section: 'game-board-container' },
+    { id: 'p1_t1_p2', title: 'プレイヤー2の番 (P1-T1)', phase: 1, turn: 2, section: 'game-board-container' },
+    { id: 'p1_t1_p3', title: 'プレイヤー3の番 (P1-T1)', phase: 1, turn: 3, section: 'game-board-container' },
+    { id: 'p1_t1_p4', title: 'プレイヤー4の番 (P1-T1)', phase: 1, turn: 4, section: 'game-board-container' },
+    { id: 'p1_t2_start', title: 'フェーズ1-T2開始', phase: 1, turn: 5, section: 'game-board-container', intro: "フェーズ1、第2ターンが始まります。ここで『化学反応の方向』カードが1枚引かれます。プレイヤーはこの方向性を考慮し、手札からエッセンスカードを提示するか、セレンディピティを発動します。" },
+    { id: 'p1_t2_p1', title: 'プレイヤー1の番 (P1-T2)', phase: 1, turn: 6, section: 'game-board-container' },
+    { id: 'p1_t2_p2', title: 'プレイヤー2の番 (P1-T2)', phase: 1, turn: 7, section: 'game-board-container' },
+    { id: 'p1_t2_p3', title: 'プレイヤー3の番 (P1-T2)', phase: 1, turn: 8, section: 'game-board-container' },
+    { id: 'p1_t2_p4', title: 'プレイヤー4の番 (P1-T2)', phase: 1, turn: 9, section: 'game-board-container' },
+    { id: 'p2_dialogue', title: 'フェーズ2: 対話', phase: 2, turn: 1, section: 'game-board-container', intro: "フェーズ2に移行します。各プレイヤーが提示した問いかけと場に出ているカードを基に、チーム全体で自由なディスカッションを行います。このフェーズではAIエージェントが相互に発言し、アイデアの化学反応を深めます。" },
+    { id: 'p3_synthesis', title: 'フェーズ3: 結論', phase: 3, turn: 1, section: 'section-synthesis', intro: "フェーズ3。これまでの議論で生まれた洞察を統合し、中央の問いに対する最終的な結論を導き出します。知の化学反応マップが生成されます。" }
+];
+
+const timelineEl = document.getElementById('timeline');
+const boardCardsEl = document.getElementById('board-cards');
+const dialogueContentEl = document.getElementById('dialogue-content');
+const boardIntroEl = document.getElementById('board-intro');
+const mainCentralQuestion = document.getElementById('main-central-question');
+const geminiApiKeyInput = document.getElementById('gemini-api-key');
+const saveApiKeyBtn = document.getElementById('save-api-key-btn');
+const apiKeyStatus = document.getElementById('api-key-status');
+const gameControls = document.getElementById('game-controls');
+const startSimulationBtn = document.getElementById('start-simulation-btn');
+const nextTurnBtn = document.getElementById('next-turn-btn');
+const resetGameBtn = document.getElementById('reset-game-btn');
+
+const sectionIntro = document.getElementById('section-intro');
+const sectionRules = document.getElementById('section-rules');
+const sectionSynthesis = document.getElementById('section-synthesis');
+const gameBoardContainer = document.getElementById('game-board-container');
+const centralQuestionOverlay = document.getElementById('central-question-overlay');
+
+// LLM関連の要素
+const summarizeDialogueBtn = document.getElementById('summarize-dialogue-btn');
+const dialogueSummaryEl = document.getElementById('dialogue-summary');
+const summaryContentEl = document.getElementById('summary-content');
+const summaryLoadingEl = document.getElementById('summary-loading');
+const closeSummaryBtn = document.getElementById('close-summary-btn');
+const loadingDialogue = document.getElementById('loading-dialogue');
+const loadingSynthesis = document.getElementById('loading-synthesis');
+const loadingFinalConclusion = document.getElementById('loading-final-conclusion');
+
+
+const conceptPopup = document.getElementById('concept-popup');
+const popupConceptTitle = document.getElementById('popup-concept-title');
+const expandConceptBtn = document.getElementById('expand-concept-btn');
+const popupContentEl = document.getElementById('popup-content');
+const popupLoadingEl = document.getElementById('popup-loading');
+const closePopupBtn = document.getElementById('close-popup-btn');
+
+let synthesisChartInstance = null;
+let currentChartClickConcept = '';
+
+// --- Utility Functions ---
+function getPlayerInfo(player) {
+    // ジャンルごとにemojiや色を割り当て（例）
+    const genreEmojiMap = {
+        '科学': '🧑‍🔬',
+        '文学': '📚',
+        '哲学': '🤔',
+        'ビジネス': '💼',
+        '歴史': '🏺',
+        '環境': '🌱',
+        '料理': '🍳',
+        'ゲーム': '🎮',
+        '経済学': '💹',
+        '芸術': '🎨',
+        '心理学': '🧠',
+        '社会学': '🌏'
+    };
+    const emoji = genreEmojiMap[player.favoriteGenre] || '🧑';
+    // 色はジャンルカラーまたは性別で分岐（例）
+    let color = 'bg-gray-100', text = 'text-gray-600';
+    if (genreColors[player.favoriteGenre]) {
+        color = genreColors[player.favoriteGenre].tagBg;
+        text = genreColors[player.favoriteGenre].tagText;
+    }
+    return { emoji, color, text };
+}
+
+function createCardHTML(card) {
+    let playerInfo = { emoji: '', color: '', text: '' };
+    if (card.player && card.player !== 'F' && gameState && gameState.players) {
+        const playerObj = gameState.players.find(p => p.name === card.player);
+        if (playerObj) playerInfo = getPlayerInfo(playerObj);
+    } else if (card.player === 'F') {
+        playerInfo = { emoji: '🧑‍🏫', color: 'bg-gray-100', text: 'text-gray-600' };
+    }
+    let borderColorClass = 'border-stone-200';
+    let bgColorClass = 'bg-white';
+    let titleColorClass = 'text-stone-800';
+    let authorYearColorClass = 'text-stone-500';
+    let genreTagClasses = '';
+
+    if (card.genre && genreColors[card.genre]) {
+        borderColorClass = genreColors[card.genre].cardBorder;
+        genreTagClasses = `${genreColors[card.genre].tagBg} ${genreColors[card.genre].tagText}`;
+    } else if (card.type === 'my_essence' || card.type === 'essence') {
+        borderColorClass = 'border-amber-400';
+    } else if (card.type === 'direction') {
+        borderColorClass = 'border-teal-400';
+        bgColorClass = 'bg-teal-50';
+        titleColorClass = 'text-teal-800';
+    }
+    
+    if (card.serendipity) {
+        borderColorClass = 'border-indigo-300';
+        if (card.type !== 'direction') {
+            bgColorClass = 'bg-indigo-50';
+        }
+    }
+
+    return `
+        <div class="card p-4 rounded-lg border-2 ${borderColorClass} ${bgColorClass} fade-in flex flex-col h-full">
+            ${card.type !== 'direction' && card.player ? `<p class="text-sm font-semibold ${playerInfo.text}">${playerInfo.emoji} ${card.player}</p>` : ''}
+            <h4 class="font-bold text-lg mt-1 ${titleColorClass}">${card.title}</h4>
+            ${card.author ? `<p class="text-sm ${authorYearColorClass}">${card.author} (${card.publicationYear})</p>` : ''}
+            ${card.genre ? `<p class="text-xs font-medium mt-1 inline-block px-2 py-0.5 rounded-full ${genreTagClasses} border ${borderColorClass}">${card.genre}</p>` : ''}
+            ${card.description ? `<div class="text-sm text-stone-700 mt-2 flex-grow leading-relaxed">${card.description}</div>` : ''}
+        </div>
+    `;
+}
+
+function createDialogueHTML(item) {
+    let playerInfo = { emoji: '', color: '', text: '' };
+    if (item.player && item.player !== 'F' && gameState && gameState.players) {
+        const playerObj = gameState.players.find(p => p.name === item.player);
+        if (playerObj) playerInfo = getPlayerInfo(playerObj);
+    } else if (item.player === 'F') {
+        playerInfo = { emoji: '🧑‍🏫', color: 'bg-gray-100', text: 'text-gray-600' };
+    }
+    let contentHTML;
+
+    if (item.question) {
+        contentHTML = `
+            <div class="mt-1 p-3 bg-stone-50 rounded-lg border border-stone-200">
+                <p class="text-stone-700"><b>問い:</b> ${item.question}</p>
+            </div>
+        `;
+    } else if (item.type === 'response_to_question' && item.respondsToPlayer) {
+        const originalQuestion = gameState.playerQuestions[item.respondsToPlayer] || "（元の問いが見つかりません）";
+        contentHTML = `
+            <div class="mt-1 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                <p class="text-xs font-semibold text-amber-700 mb-1">【${item.respondsToPlayer}への問いかけ】</p>
+                <p class="text-sm text-stone-700 italic mb-2">"${originalQuestion}"</p>
+                <p class="text-stone-700 whitespace-pre-line">${item.text}</p>
+            </div>
+        `;
+    } else {
+        contentHTML = `
+            <p class="text-stone-700 whitespace-pre-line">${item.text}</p>
+        `;
+    }
+
+    return `
+        <div class="flex items-start gap-3 fade-in">
+            <div class="w-10 h-10 rounded-full ${playerInfo.color} flex items-center justify-center font-bold ${playerInfo.text} flex-shrink-0">${playerInfo.emoji}</div>
+            <div>
+                <p class="font-semibold ${playerInfo.text}">${item.player}</p>
+                ${contentHTML}
+            </div>
+        </div>
+    `;
+}
+
+// ゲームステータスを出力する関数
+function logGameStatus() {
+    console.log('[BIBLIOMIX] ゲームステータス:', {
+        currentPhase: gameState.currentPhase,
+        currentTurn: gameState.currentTurn,
+        currentPlayerIndex: gameState.currentPlayerIndex,
+        boardCards: gameState.boardCards.map(c => ({ id: c.id, title: c.title, type: c.type, player: c.player })),
+        players: gameState.players.map(p => ({ name: p.name, hand: p.hand ? p.hand.map(c => c.title) : [] }))
+    });
+}
+
+// updateUIの最初で呼び出す
+function updateUI(stepId) {
+    logGameStatus();
+    document.querySelectorAll('.timeline-item').forEach(item => item.classList.remove('active'));
+    if (stepId) {
+        const activeTimelineItem = document.querySelector(`[data-step="${stepId}"]`);
+        if (activeTimelineItem) {
+            activeTimelineItem.classList.add('active');
+        }
+    }
+
+    // ポップアップやオーバーレイの非表示
+    if (conceptPopup) conceptPopup.classList.add('hidden');
+    if (dialogueSummaryEl) dialogueSummaryEl.classList.add('hidden');
+    if (summaryLoadingEl) summaryLoadingEl.classList.add('hidden');
+    if (centralQuestionOverlay) centralQuestionOverlay.classList.add('hidden');
+
+    // 初期表示は全て非表示に（hiddenクラスで管理）
+    if (sectionRules) sectionRules.classList.add('hidden');
+    if (sectionIntro) sectionIntro.classList.add('hidden');
+    if (gameBoardContainer) gameBoardContainer.classList.add('hidden');
+    if (sectionSynthesis) sectionSynthesis.classList.add('hidden');
+
+    // mainのグリッドクラスは常に維持
+    const mainEl = document.querySelector('main');
+    if (mainEl) {
+        mainEl.classList.add('md:grid', 'md:grid-cols-12', 'md:gap-8');
+    }
+
+    // ターゲットセクションの決定
+    const currentTimelineItem = timelineConfig.find(item => item.id === stepId);
+    let targetSectionId = currentTimelineItem ? currentTimelineItem.section : 'section-rules';
+
+    //　セクションごとの表示切替
+    // セクションごとの表示切り替え
+    if (targetSectionId === 'section-rules') {
+        if (sectionRules) sectionRules.classList.remove('hidden');
+        if (API_KEY) {
+            startSimulationBtn.classList.remove('hidden');
+            nextTurnBtn.classList.add('hidden');
+            resetGameBtn.classList.add('hidden');
+        }
+    } else if (targetSectionId === 'section-intro') {
+        if (sectionIntro) sectionIntro.classList.remove('hidden');
+        if (API_KEY) {
+            startSimulationBtn.classList.add('hidden');
+            nextTurnBtn.classList.remove('hidden');
+            resetGameBtn.classList.remove('hidden');
+        }
+    } else if (targetSectionId === 'section-synthesis') {
+        if (sectionSynthesis) sectionSynthesis.classList.remove('hidden');
+        if (centralQuestionOverlay) {
+            centralQuestionOverlay.textContent = gameState.centralQuestion;
+            centralQuestionOverlay.classList.remove('hidden');
+        }
+        if (API_KEY) {
+            startSimulationBtn.classList.add('hidden');
+            nextTurnBtn.classList.add('hidden');
+            resetGameBtn.classList.remove('hidden');
+        }
+    } else {
+        // ゲームボード関連セクション
+        if (gameBoardContainer) gameBoardContainer.classList.remove('hidden');
+        if (boardIntroEl) boardIntroEl.textContent = currentTimelineItem?.intro || "";
+        if (boardCardsEl) boardCardsEl.innerHTML = gameState.boardCards.map(cardRef => createCardHTML(cardRef)).join('');
+        if (dialogueContentEl) {
+            dialogueContentEl.innerHTML = gameState.gameLog.map(createDialogueHTML).join('');
+            dialogueContentEl.scrollTop = dialogueContentEl.scrollHeight;
+        }
+        if (summarizeDialogueBtn) summarizeDialogueBtn.style.display = (gameState.currentPhase === 2) ? 'block' : 'none';
+        if (API_KEY) {
+            if (gameState.currentPhase === 0 && gameState.currentTurn === 0) {
+                startSimulationBtn.classList.add('hidden');
+                nextTurnBtn.classList.remove('hidden');
+                resetGameBtn.classList.remove('hidden');
+            } else {
+                startSimulationBtn.classList.add('hidden');
+                nextTurnBtn.classList.remove('hidden');
+                resetGameBtn.classList.remove('hidden');
+            }
+        }
+    }
+
+    // APIキーセクションの表示制御
+    if (API_KEY) {
+        document.getElementById('api-key-section').classList.add('hidden');
+        gameControls.classList.remove('hidden');
+    } else {
+        document.getElementById('api-key-section').classList.remove('hidden');
+        gameControls.classList.add('hidden');
+    }
+
+    // 不正な進行状態のチェック
+    if (!stepId || !timelineConfig.some(item => item.id === stepId)) {
+        alert('不正な進行状態です。ゲームをリセットしてください。');
+    }
+}
+// --- Game Logic ---
+async function callGeminiAPI(prompt, systemInstruction = null) {
+    if (!API_KEY) {
+        alert("Gemini APIキーが設定されていません。");
+        return "APIキーが設定されていません。";
+    }
+
+    const chatHistory = [];
+    if (systemInstruction) {
+        chatHistory.push({ role: "user", parts: [{ text: systemInstruction }] });
+        chatHistory.push({ role: "model", parts: [{ text: "はい、承知いたしました。" }] });
+    }
+    chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+
+    const payload = { contents: chatHistory };
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
+
+    // console.log("[Gemini] APIリクエスト送信", { apiUrl, payload });
+
+    try {
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        // console.log("[Gemini] レスポンス受信", response);
+        const result = await response.json();
+        // console.log("[Gemini] レスポンスJSON", result);
+        if (result.candidates && result.candidates.length > 0 &&
+            result.candidates[0].content && result.candidates[0].content.parts &&
+            result.candidates[0].content.parts.length > 0) {
+            let text = result.candidates[0].content.parts[0].text;
+            text = text.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+            text = text.split('\n').map(line => {
+                if (line.startsWith('* ')) {
+                    return `<li>${line.substring(2)}</li>`;
+                }
+                return line;
+            }).join('');
+            if (text.includes('<li>')) {
+                text = `<ul>${text}</ul>`;
+            }
+            return text;
+        } else {
+            console.error("[Gemini] API response structure unexpected:", result);
+            alert("Gemini APIの応答が不正です。APIキーやネットワークを確認してください。");
+            return "応答の生成に失敗しました。";
+        }
+    } catch (error) {
+        console.error("[Gemini] Error calling Gemini API:", error);
+        alert("Gemini API呼び出し中にエラーが発生しました: " + error.message);
+        return `API呼び出し中にエラーが発生しました: ${error.message}`;
+    }
+}
+
+// Helper to simulate drawing cards
+function drawRandomCard(excludedCardIds = []) {
+    const availableCards = allAvailableEssenceCards.filter(card => !excludedCardIds.includes(card.id));
+    if (availableCards.length === 0) return null;
+    const randomIndex = Math.floor(Math.random() * availableCards.length);
+    return availableCards[randomIndex];
+}
+
+async function advanceGame() {
+    // 1. ルール→参加者
+    if (gameState.currentPhase === 0 && gameState.currentTurn === 0) {
+        gameState.currentTurn = 1;
+        updateUI('intro');
+        return;
+    }
+    // 2. 参加者→フェーズ1-T1開始
+    if (gameState.currentPhase === 0 && gameState.currentTurn === 1) {
+        gameState.currentPhase = 1;
+        gameState.currentTurn = 0;
+        updateUI('p1_t1_start');
+            return;
+        }
+    // 3. フェーズ1-T1開始→プレイヤー1の番
+    if (gameState.currentPhase === 1 && gameState.currentTurn === 0) {
+        gameState.currentTurn = 1;
+        gameState.currentPlayerIndex = 0;
+        updateUI('p1_t1_p1');
+            return;
+    }
+    // 4. フェーズ1-T1: 各プレイヤーの番（エッセンスカード紹介→他プレイヤーの質問→ファシリテーター選択）
+    if (gameState.currentPhase === 1 && gameState.currentTurn > 0 && gameState.currentTurn <= gameState.players.length) {
+        const player = gameState.players[gameState.currentPlayerIndex];
+        // 1. エッセンスカード紹介
+            if (!gameState.p1t1Step || gameState.p1t1Step === 'intro') {
+            const myCard = player.myEssenceCard;
+            // 場にカードがなければ追加
+                if (!gameState.boardCards.some(c => c.id === myCard.id)) {
+                gameState.boardCards.push({ ...myCard, type: 'essence', player: player.name });
+                }
+            // ★カードを出した直後に手札から削除
+            if (player.hand) {
+                player.hand = player.hand.filter(c => c.id !== myCard.id);
+            }
+            const prompt = `あなたは「${player.name}」です。あなたの役割は「${player.job}」です。\n中央の問いは「${gameState.centralQuestion}」です。\nあなたのマイ・エッセンスカードは「${myCard.title}」（ジャンル: ${myCard.genre}、概要: ${myCard.description.replace(/<[^>]*>?/gm, '')}）です。\nこのターンでは、あなたのマイ・エッセンスカードの核となる概念を、他のプレイヤーに分かりやすく紹介してください。\n※このターンでは質問は投げかけず、紹介だけを行ってください。\n\n以下のフォーマットに厳密に従ってください:\n${player.name}: [あなたのカードの説明と核となる概念（太字で強調）]`;
+            const response = await callGeminiAPI(prompt, player.persona);
+            const playerText = response.replace(`${player.name}:`, '').trim();
+            gameState.gameLog.push({ player: player.name, text: playerText });
+                // 次は質問フェーズへ
+                gameState.p1t1Step = 'questions';
+                gameState.p1t1Questions = [];
+            gameState.p1t1QuestionPlayers = gameState.players.filter(p => p.name !== player.name);
+                gameState.p1t1QuestionIndex = 0;
+            updateUI(`p1_t1_p${gameState.currentPlayerIndex + 1}`);
+                return;
+            }
+        // 2. 他プレイヤーの質問
+            if (gameState.p1t1Step === 'questions') {
+                const questionPlayer = gameState.p1t1QuestionPlayers[gameState.p1t1QuestionIndex];
+            const myCard = player.myEssenceCard;
+            const prompt = `あなたは「${questionPlayer.name}」です。あなたの役割は「${questionPlayer.job}」です。\n中央の問いは「${gameState.centralQuestion}」です。\n今、${player.name}さんが紹介したエッセンスカードは「${myCard.title}」（ジャンル: ${myCard.genre}、概要: ${myCard.description.replace(/<[^>]*>?/gm, '')}）です。\nこのターンでは、${player.name}さんのエッセンスカードの内容やそこから得られる知識について、好奇心を持って学びを深めるためのオープンな問いを1つ投げかけてください。\n※中央の問いの答えを直接求めるのではなく、知識や視点の広がり・新たな発見・探究を促す問いにしてください。\n\n以下のフォーマットに厳密に従ってください:\n${questionPlayer.name}: [あなたの質問を二重引用符で囲む]`;
+            const response = await callGeminiAPI(prompt, questionPlayer.persona);
+                const match = response.match(/^[^:]+:\s*"(.*)"/m);
+            const question = match ? match[1] : response.replace(`${questionPlayer.name}:`, '').replace(/"/g, '').trim();
+            gameState.gameLog.push({ player: questionPlayer.name, question: question, to: player.name });
+            gameState.p1t1Questions.push({ player: questionPlayer.name, question });
+                gameState.p1t1QuestionIndex++;
+                if (gameState.p1t1QuestionIndex < gameState.p1t1QuestionPlayers.length) {
+                updateUI(`p1_t1_p${gameState.currentPlayerIndex + 1}`);
+                    return;
+                } else {
+                // 3人目の質問が終わったらファシリテーター選択へ
+                    gameState.p1t1Step = 'choose';
+                updateUI(`p1_t1_p${gameState.currentPlayerIndex + 1}`);
+                    return;
+                }
+            }
+            // 3. ファシリテーターが質問を選ぶ
+            if (gameState.p1t1Step === 'choose') {
+                const questionChoices = gameState.p1t1Questions.map(q => `${q.player}さんの問い: 「${q.question}」`).join('\n');
+            const facilitatorPrompt = `あなたはファシリテーターです。${player.name}さんのエッセンスカード紹介に対して、他のプレイヤーが提案した質問の中から、中央の問い「${gameState.centralQuestion}」とこれまでの議論に最も関連し、今後の議論を深めるのに最適な質問を一つ選び、それをチームの「問いかけ」として決定してください。\n選択した質問をそのまま引用し、誰の質問であったかを明確にしてください。\n\n[プレイヤーの質問リスト]\n${questionChoices}\n\n以下のフォーマットに厳密に従ってください:\nF: 選択した問いかけを引用し、誰の問いかけであるか明確にする。`;
+            const facilitatorResponse = await callGeminiAPI(facilitatorPrompt);
+                gameState.gameLog.push({ player: 'F', text: facilitatorResponse });
+                // 次のプレイヤーの番へ
+                gameState.currentPlayerIndex++;
+            if (gameState.currentPlayerIndex >= gameState.players.length) {
+                    // T1終了→T2開始
+                    gameState.currentPlayerIndex = 0;
+                    gameState.currentPhase = 1;
+                    gameState.currentTurn = gameState.players.length + 1; // 5
+                    // ステップ管理リセット
+                    delete gameState.p1t1Step;
+                    delete gameState.p1t1Questions;
+                    delete gameState.p1t1QuestionPlayers;
+                    delete gameState.p1t1QuestionIndex;
+                    updateUI('p1_t2_start');
+                    return;
+                }
+                // ステップ管理リセット
+                delete gameState.p1t1Step;
+                delete gameState.p1t1Questions;
+                delete gameState.p1t1QuestionPlayers;
+                delete gameState.p1t1QuestionIndex;
+            updateUI(`p1_t1_p${gameState.currentPlayerIndex + 1}`);
+                return;
+            }
+    }
+    // 5. フェーズ1-T2開始（方向カードを引く）
+    if (gameState.currentPhase === 1 && gameState.currentTurn === gameState.players.length + 1) {
+        const directionCard = drawRandomCard(gameState.boardCards.map(c => c.id));
+        if (directionCard) {
+            directionCard.type = 'direction';
+            if (!gameState.boardCards.some(c => c.id === directionCard.id && c.type === 'direction')) {
+                gameState.boardCards.unshift(directionCard);
+            }
+            gameState.activeDirectionCard = directionCard;
+        }
+        gameState.currentTurn++;
+        gameState.currentPlayerIndex = 0;
+        updateUI('p1_t2_start');
+        return;
+    }
+    // 6. フェーズ1-T2: 各プレイヤーの番（カード提示orセレンディピティ）
+    if (gameState.currentPhase === 1 && gameState.currentTurn > gameState.players.length + 1 && gameState.currentTurn <= gameState.players.length * 2 + 1) {
+        const player = gameState.players[gameState.currentPlayerIndex];
+        // カード提示orセレンディピティ選択
+        const prompt = `あなたは「${player.name}」です。あなたの役割は「${player.job}」です。\n中央の問いは「${gameState.centralQuestion}」です。\n現在の「化学反応の方向」カードは「${gameState.activeDirectionCard.title}」です。\nあなたの手札から提示できるエッセンスカードがあれば、そのカードを紹介し、中央の問いと方向性に関連する質問を1つ提案してください。\nもし提示できるカードがなければ「スキップします。」とだけ答えてください。\n\n以下のフォーマットに厳密に従ってください:\n${player.name}: [カード説明と核となる概念（太字で強調）] または ${player.name}: スキップします。`;
+        const response = await callGeminiAPI(prompt, player.persona);
+        if (response.includes('スキップします。')) {
+            gameState.gameLog.push({ player: player.name, text: 'スキップします。' });
+            // セレンディピティ発動
+            const serendipityCard = drawRandomCard(gameState.boardCards.map(c => c.id));
+            if (serendipityCard) {
+                serendipityCard.serendipity = true;
+                serendipityCard.type = 'essence';
+                gameState.boardCards.push(serendipityCard);
+            }
+            const serendipityDirection = drawRandomCard(gameState.boardCards.filter(c => c.type === 'direction').map(c => c.id));
+            if (serendipityDirection) {
+                serendipityDirection.type = 'direction';
+                serendipityDirection.serendipity = true;
+                gameState.boardCards = gameState.boardCards.filter(card => card.type !== 'direction');
+                gameState.boardCards.unshift(serendipityDirection);
+                gameState.activeDirectionCard = serendipityDirection;
+            }
+            // 進行状態は進めず、同じプレイヤーの番を継続
+            updateUI(`p1_t2_p${gameState.currentPlayerIndex + 1}`);
+            return;
+        } else {
+            // カード提示・質問
+            const playerText = response.replace(`${player.name}:`, '').trim();
+            gameState.gameLog.push({ player: player.name, text: playerText });
+            // 質問抽出
+            const match = playerText.match(/"(.+?)"/);
+            const question = match ? match[1] : '';
+            if (question) gameState.gameLog.push({ player: player.name, question });
+            // ★handから出したカードを削除
+            // どのカードを出したかをタイトルで特定
+            const usedCard = player.hand.find(card => playerText.includes(card.title));
+            if (usedCard) {
+                player.hand = player.hand.filter(card => card.id !== usedCard.id);
+            }
+            // 次のプレイヤーへ or フェーズ2へ
+            gameState.currentPlayerIndex++;
+            // 4人目のT2が終わったらフェーズ2へ
+            if (gameState.currentPlayerIndex >= gameState.players.length) {
+                gameState.currentPlayerIndex = 0;
+                gameState.currentPhase = 2;
+                gameState.currentTurn = 1;
+                updateUI('p2_dialogue');
+                return;
+            }
+            gameState.currentTurn++;
+            updateUI(`p1_t2_p${gameState.currentPlayerIndex + 1}`);
+            return;
+        }
+    }
+    // 7. フェーズ2: 自由対話
+    if (gameState.currentPhase === 2) {
+        const player = gameState.players[gameState.currentPlayerIndex];
+        const prompt = `あなたは「${player.name}」です。中央の問いは「${gameState.centralQuestion}」。これまでの議論・カード・問いかけを踏まえ、自由に発言してください。`;
+        const response = await callGeminiAPI(prompt, player.persona);
+        gameState.gameLog.push({ player: player.name, text: response });
+            gameState.currentPlayerIndex++;
+        // 総発言数カウント
+        if (!gameState.phase2TotalTurns) gameState.phase2TotalTurns = 0;
+        gameState.phase2TotalTurns++;
+        let shouldEnd = false;
+        if (gameState.currentPlayerIndex >= gameState.players.length) {
+                gameState.currentPlayerIndex = 0;
+            // ファシリテーターに「結論に到達したか？」を判定させる
+            const dialogueText = gameState.gameLog.slice(-gameState.players.length*3).map(item => `${item.player}: ${item.text || item.question || ''}`).join('\n');
+            const facilitatorPrompt = `あなたはファシリテーターです。以下の議論ログを読み、この議論が中央の問い「${gameState.centralQuestion}」に対して十分な結論に到達したかどうかを「はい」または「いいえ」で簡潔に答えてください。\n\n[議論ログ]\n${dialogueText}`;
+            const facilitatorResponse = await callGeminiAPI(facilitatorPrompt, 'ファシリテーター');
+            gameState.gameLog.push({ player: 'F', text: `結論到達判定: ${facilitatorResponse}` });
+            if (facilitatorResponse.includes('はい')) {
+                shouldEnd = true;
+            }
+        }
+        // 12ターン以上 or ファシリテーター判定で終了
+        if (gameState.phase2TotalTurns >= 12 || shouldEnd) {
+            gameState.currentPhase = 3;
+            gameState.currentTurn = 1;
+            updateUI('p3_synthesis');
+            return;
+        }
+        updateUI('p2_dialogue');
+        return;
+    }
+    // 8. フェーズ3: 結論・マップ生成
+    if (gameState.currentPhase === 3) {
+        const prompt = `これまでの議論ログとカード、問いかけを踏まえ、中央の問い「${gameState.centralQuestion}」に対する結論を簡潔にまとめてください。`; 
+        const response = await callGeminiAPI(prompt);
+        gameState.finalConclusion = response;
+        gameState.gameLog.push({ player: 'F', text: response });
+        renderSynthesisChart();
+        updateUI('p3_synthesis');
+        return;
+    }
+    // 進行状態異常時
+    alert('不正な進行状態です。ゲームをリセットしてください。');
+    return;
+}
+
+function renderSynthesisChart() {
+    const canvas = document.getElementById('synthesis-chart');
+    if (!canvas) return;
+    if (synthesisChartInstance) {
+        synthesisChartInstance.destroy();
+    }
+    const ctx = canvas.getContext('2d');
+    synthesisChartInstance = new Chart(ctx, {
+        type: 'bubble',
+        data: gameState.synthesisData, // Use dynamic gameState.synthesisData
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    enabled: true,
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    titleFont: { size: 14, weight: 'bold' },
+                    bodyFont: { size: 12 },
+                    padding: 12,
+                    callbacks: {
+                        label: function(context) {
+                            const dataPoint = context.raw;
+                            return `${dataPoint.concept}: ${dataPoint.quote}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { display: false, min: 0, max: 10 },
+                y: { display: false, min: 0, max: 10 }
+            },
+            onClick: (event, elements) => {
+                if (elements.length > 0) {
+                    const firstElement = elements[0];
+                    const datasetIndex = firstElement.datasetIndex;
+                    const index = firstElement.index;
+                    const conceptData = synthesisChartInstance.data.datasets[datasetIndex].data[index];
+                    
+                    currentChartClickConcept = conceptData.concept;
+                    popupConceptTitle.textContent = currentChartClickConcept;
+                    popupContentEl.innerHTML = '';
+                    popupLoadingEl.classList.add('hidden');
+                    expandConceptBtn.classList.remove('hidden');
+                    
+                    conceptPopup.classList.remove('hidden');
+                    conceptPopup.classList.add('show');
+                } else {
+                    conceptPopup.classList.remove('show');
+                    conceptPopup.classList.add('hidden');
+                }
+            }
+        },
+        plugins: [{
+            id: 'customCanvasDraw',
+            afterDraw: (chart) => {
+                const ctx = chart.ctx;
+                const meta = chart.getDatasetMeta(0);
+                const data = chart.data.datasets[0].data;
+                const relationships = gameState.synthesisData.relationships; // Use dynamic relationships
+
+                ctx.save();
+                ctx.strokeStyle = '#D4A056';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+
+                relationships.forEach(rel => {
+                    const fromDataPoint = data.find(d => d.concept === rel.from);
+                    const toDataPoint = data.find(d => d.concept === rel.to);
+                    
+                    if (fromDataPoint && toDataPoint) {
+                        const fromIndex = data.indexOf(fromDataPoint);
+                        const toIndex = data.indexOf(toDataPoint);
+
+                        const fromElement = meta.data[fromIndex];
+                        const toElement = meta.data[toIndex];
+
+                        if (fromElement && toElement) {
+                            ctx.beginPath();
+                            ctx.moveTo(fromElement.x, fromElement.y);
+                            ctx.lineTo(toElement.x, toElement.y);
+                            ctx.stroke();
+                        }
+                    }
+                });
+                ctx.restore();
+            }
+        }]
+    });
+}
+
+// --- Event Listeners ---
+saveApiKeyBtn.addEventListener('click', () => {
+    const key = geminiApiKeyInput.value.trim();
+    if (key) {
+        API_KEY = key;
+        apiKeyStatus.textContent = 'APIキーが保存されました！';
+        apiKeyStatus.classList.remove('hidden', 'text-red-700');
+        apiKeyStatus.classList.add('text-green-700');
+        document.getElementById('api-key-section').classList.add('hidden');
+        gameControls.classList.remove('hidden');
+        startSimulationBtn.classList.remove('hidden');
+    } else {
+        apiKeyStatus.textContent = 'APIキーを入力してください。';
+        apiKeyStatus.classList.remove('hidden', 'text-green-700');
+        apiKeyStatus.classList.add('text-red-700');
+    }
+});
+
+startSimulationBtn.addEventListener('click', async () => {
+    if (!API_KEY) {
+        alert("Gemini APIキーを入力してください。");
+        return;
+    }
+    startSimulationBtn.classList.add('hidden');
+    nextTurnBtn.classList.remove('hidden');
+    resetGameBtn.classList.remove('hidden');
+    resetGame();
+    await initializeGameState();
+    // advanceGame()は呼ばず、intro画面で止める
+    updateUI('intro');
+});
+
+nextTurnBtn.addEventListener('click', () => {
+    advanceGame();
+});
+
+resetGameBtn.addEventListener('click', () => {
+    resetGame();
+    updateUI('intro');
+    startSimulationBtn.classList.remove('hidden');
+    nextTurnBtn.classList.add('hidden');
+    resetGameBtn.classList.add('hidden');
+});
+
+if (summarizeDialogueBtn) {
+summarizeDialogueBtn.addEventListener('click', async () => {
+    summaryLoadingEl.classList.remove('hidden');
+    dialogueSummaryEl.classList.add('hidden');
+    summarizeDialogueBtn.disabled = true;
+
+    const dialogueTextElements = dialogueContentEl.querySelectorAll('.text-stone-700');
+    let fullDialogue = Array.from(dialogueTextElements).map(el => {
+        const playerEl = el.closest('.flex')?.querySelector('.font-semibold');
+        const player = playerEl ? playerEl.textContent.trim().replace('からの問い', '') : '';
+        return `${player}: ${el.textContent.trim()}`;
+    }).join('\n\n');
+
+    const prompt = `以下の会議の対話ログを読み、主要な議論のポイントとそこから導かれる結論の要約を箇条書きで作成してください。各話者の発言内容と、議論の発展に寄与した主要なキーワードを特定してください。出力は日本語でお願いします。\n\n[対話ログ]\n${fullDialogue}`;
+    const summary = await callGeminiAPI(prompt);
+
+    summaryContentEl.innerHTML = summary;
+    dialogueSummaryEl.classList.remove('hidden');
+    summaryLoadingEl.classList.add('hidden');
+    summarizeDialogueBtn.disabled = false;
+});
+}
+
+if (closeSummaryBtn) {
+closeSummaryBtn.addEventListener('click', () => {
+    dialogueSummaryEl.classList.add('hidden');
+    summaryContentEl.innerHTML = '';
+});
+}
+
+// const expandConceptBtn = document.getElementById('expand-concept-btn');
+if (expandConceptBtn) {
+    expandConceptBtn.addEventListener('click', async () => {
+        popupLoadingEl.classList.remove('hidden');
+        popupContentEl.innerHTML = '';
+        expandConceptBtn.disabled = true;
+
+        const centralQ = gameState.centralQuestion;
+        const finalConc = gameState.finalConclusion || "まだ結論は出ていません。";
+        const prompt = `中央の問い「${centralQ}」と、これまでの議論を経て導き出された最終結論「${finalConc}」を踏まえ、「${currentChartClickConcept}」というキーワードが、この議論においてどのように貢献し、どのような新たな問いや視点をもたらす可能性があるか、具体的に提案してください。提案は箇条書きで、重要なキーワードは太字（<b>タグ）で強調してください。出力は日本語でお願いします。`;
+        const explanation = await callGeminiAPI(prompt);
+
+        popupContentEl.innerHTML = explanation;
+        popupLoadingEl.classList.add('hidden');
+        expandConceptBtn.disabled = false;
+    });
+} else {
+    console.error('expandConceptBtn not found!');
+}
+
+// const closePopupBtn = document.getElementById('close-popup-btn');
+if (closePopupBtn) {
+    closePopupBtn.addEventListener('click', () => {
+        conceptPopup.classList.remove('show');
+        conceptPopup.classList.add('hidden');
+        popupContentEl.innerHTML = '';
+        currentChartClickConcept = '';
+    });
+} else {
+    console.error('closePopupBtn not found!');
+}
+
+function resetGame() {
+    gameState = {
+        currentPhase: 0,
+        currentTurn: 0,
+        currentPlayerIndex: 0,
+        centralQuestion: "",
+        boardCards: [],
+        activeDirectionCard: null,
+        playerQuestions: {},
+        gameLog: [],
+        players: [],
+        phase2DiscussionRound: 0,
+        maxPhase2DiscussionRounds: 4,
+        finalConclusion: ""
+    };
+    mainCentralQuestion.textContent = "";
+    updateUI('intro');
+}
+
+function initializeUI() {
+    const timelineEl = document.getElementById('timeline');
+    const geminiApiKeyInput = document.getElementById('gemini-api-key');
+    const apiKeyStatus = document.getElementById('api-key-status');
+    const gameControls = document.getElementById('game-controls');
+    const startSimulationBtn = document.getElementById('start-simulation-btn');
+    const nextTurnBtn = document.getElementById('next-turn-btn');
+    const resetGameBtn = document.getElementById('reset-game-btn');
+    const summarizeDialogueBtn = document.getElementById('summarize-dialogue-btn');
+    // ...他にも必要な要素...
+
+    // どれか1つでもnullならエラー
+    if (!timelineEl || !geminiApiKeyInput || !apiKeyStatus || !gameControls ||
+        !startSimulationBtn || !nextTurnBtn || !resetGameBtn) {
+        alert("初期化に必要な要素が見つかりません。HTML構造を確認してください。");
+        console.error({
+            timelineEl, geminiApiKeyInput, apiKeyStatus, gameControls,
+            startSimulationBtn, nextTurnBtn, resetGameBtn
+        });
+        return;
+    }
+
+    timelineEl.innerHTML = timelineConfig.map(step => `
+        <li>
+            <button data-step="${step.id}" class="timeline-item w-full text-left px-4 py-2 text-sm text-stone-700 rounded-md border-l-4 border-transparent hover:bg-amber-100/50 transition-colors duration-200">
+                ${step.title}
+            </button>
+        </li>
+    `).join('');
+
+    timelineEl.addEventListener('click', (e) => {
+        if (e.target.matches('.timeline-item')) {
+            const stepId = e.target.getAttribute('data-step');
+            // gameStateの進行状態は変更せず、該当stepIdのUIだけ表示
+            updateUI(stepId);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    });
+
+    // Load API key from localStorage if exists
+    const storedApiKey = localStorage.getItem('geminiApiKey');
+    if (storedApiKey) {
+        geminiApiKeyInput.value = storedApiKey;
+        API_KEY = storedApiKey;
+        apiKeyStatus.textContent = 'APIキーが読み込まれました。';
+        apiKeyStatus.classList.remove('hidden', 'text-red-700');
+        apiKeyStatus.classList.add('text-green-700');
+        document.getElementById('api-key-section').classList.add('hidden');
+        gameControls.classList.remove('hidden');
+        startSimulationBtn.classList.remove('hidden');
+    }
+
+    updateUI('game_rules'); // Initial UI state
+
+    // ポップアップ関連の要素取得
+    const expandConceptBtn = document.getElementById('expand-concept-btn');
+    const closePopupBtn = document.getElementById('close-popup-btn');
+    const conceptPopup = document.getElementById('concept-popup');
+    const popupContentEl = document.getElementById('popup-content');
+    const popupLoadingEl = document.getElementById('popup-loading');
+
+    // nullチェック
+    if (!expandConceptBtn) console.error('expandConceptBtn not found!');
+    if (!closePopupBtn) console.error('closePopupBtn not found!');
+    if (!conceptPopup) console.error('conceptPopup not found!');
+    if (!popupContentEl) console.error('popupContentEl not found!');
+    if (!popupLoadingEl) console.error('popupLoadingEl not found!');
+
+    // イベントリスナー付与
+    if (expandConceptBtn) {
+        expandConceptBtn.addEventListener('click', async () => {
+            popupLoadingEl.classList.remove('hidden');
+            popupContentEl.innerHTML = '';
+            expandConceptBtn.disabled = true;
+
+            const centralQ = gameState.centralQuestion;
+            const finalConc = gameState.finalConclusion || "まだ結論は出ていません。";
+            const prompt = `中央の問い「${centralQ}」と、これまでの議論を経て導き出された最終結論「${finalConc}」を踏まえ、「${currentChartClickConcept}」というキーワードが、この議論においてどのように貢献し、どのような新たな問いや視点をもたらす可能性があるか、具体的に提案してください。提案は箇条書きで、重要なキーワードは太字（<b>タグ）で強調してください。出力は日本語でお願いします。`;
+            const explanation = await callGeminiAPI(prompt);
+
+            popupContentEl.innerHTML = explanation;
+            popupLoadingEl.classList.add('hidden');
+            expandConceptBtn.disabled = false;
+        });
+    }
+
+    if (closePopupBtn) {
+        closePopupBtn.addEventListener('click', () => {
+            conceptPopup.classList.remove('show');
+            conceptPopup.classList.add('hidden');
+            popupContentEl.innerHTML = '';
+            currentChartClickConcept = '';
+        });
+    }
+}
+
+// Initialize on window load
+window.onload = initializeUI;
+
+// ↓↓↓ ここを追加 ↓↓↓
+document.addEventListener('keydown', (event) => {
+    // APIキーが設定されていて、Enterキーが押された時のみ進行
+    if (API_KEY && event.key === 'Enter') {
+        // ゲームコントロールが表示されている時のみ
+        if (!nextTurnBtn.disabled && nextTurnBtn.classList.contains('hidden') === false) {
+            advanceGame();
+        }
+    }
+});
+
+function getCurrentP1T1StepId() {
+    // P1-T1: 動的にplayerIdで判定
+    if (gameState.currentPhase === 1 && gameState.currentTurn >= 1 && gameState.currentTurn <= 4) {
+        const player = gameState.players[gameState.currentPlayerIndex];
+        return player ? `p1_t1_${player.playerId}` : null;
+    }
+    return null;
+}
+
+window.addEventListener('DOMContentLoaded', initializeUI);
+
+// プレイヤー属性生成用のサンプルデータ
+const sampleNames = [
+    ['佐藤', '太郎'], ['鈴木', '花子'], ['高橋', '健一'], ['田中', '美咲'],
+    ['伊藤', '翔'], ['渡辺', '彩'], ['山本', '大輔'], ['中村', '結衣'],
+    ['小林', '悠斗'], ['加藤', 'さくら'], ['吉田', '蓮'], ['山田', '葵']
+];
+const sampleJobs = [
+    'エンジニア', '医師', '教師', '作家', '経営者', '学生', '研究者', '公務員', 'デザイナー', '起業家', '編集者', '心理カウンセラー'
+];
+const sampleGenres = Object.keys(genreColors);
+const sampleHobbies = ['読書', '旅行', '音楽', '料理', 'スポーツ', '写真', '映画鑑賞', '登山', 'ゲーム', '美術館巡り'];
+const samplePlaces = ['東京', '大阪', '京都', '札幌', '福岡', '名古屋', '仙台', '広島', '神戸', '横浜'];
+const sampleEducations = ['高卒', '短大卒', '大卒', '大学院卒', '専門卒'];
+const sampleFaiths = ['無宗教', '仏教', '神道', 'キリスト教', 'イスラム教', 'その他'];
+
+function getRandom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+function getRandomInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+
+function generatePlayer(index) {
+    const nameArr = getRandom(sampleNames);
+    const name = nameArr[0] + ' ' + nameArr[1];
+    const age = getRandomInt(20, 60);
+    const gender = getRandom(['男性', '女性', 'その他']);
+    const job = getRandom(sampleJobs);
+    const favoriteGenre = getRandom(sampleGenres);
+    const hobby = getRandom(sampleHobbies);
+    const from = getRandom(samplePlaces);
+    const live = getRandom(samplePlaces);
+    const education = getRandom(sampleEducations);
+    const faith = getRandom(sampleFaiths);
+    // ペルソナ説明文
+    const persona = `${name}（${age}歳、${gender}）。職業：${job}。好きなジャンル：${favoriteGenre}。趣味：${hobby}。出身地：${from}、居住地：${live}。学歴：${education}。信仰：${faith}。`;
+    return {
+        name,
+        age,
+        gender,
+        job,
+        favoriteGenre,
+        hobby,
+        from,
+        live,
+        education,
+        faith,
+        persona,
+        myEssenceCard: null, // 後で割り当て
+        hand: [], // 後で割り当て
+        usedCardIds: [] // 出したカードID管理
+    };
+}
+
+function generatePlayers(num = 4) {
+    const players = [];
+    for (let i = 0; i < num; i++) {
+        players.push(generatePlayer(i));
+    }
+    return players;
+}
+
+// プレイヤー生成・初期化
+async function initializeGameState() {
+    if (mainCentralQuestion) {
+        mainCentralQuestion.innerHTML = '<span class="loading-spinner"></span> 初期化中...';
+    }
+    updateUI('game_rules');
+    const players = await generatePlayersLLM(4);
+    for (const player of players) {
+        // myEssenceCard生成
+        const myEssence = await generateMyEssenceCard(player);
+        // allAvailableEssenceCardsからid一致のカードを探す
+        const baseCard = allAvailableEssenceCards.find(card => card.title === myEssence.title && card.author === myEssence.author);
+        if (baseCard) {
+            player.myEssenceCard = {
+                ...baseCard,
+                id: baseCard.id, // idはallAvailableEssenceCardsのもの
+                type: 'my_essence',
+                player: player.name
+            };
+        } else {
+            // 万一見つからなければそのまま
+            player.myEssenceCard = myEssence;
+        }
+        player.hand = [player.myEssenceCard];
+    }
+    // hand配布時の重複排除用
+    const usedCardIds = [];
+    players.forEach(player => {
+        // 自分のmyEssenceCard以外＆usedCardIdsに含まれないカードから2枚ランダムで選ぶ
+        const handCandidates = allAvailableEssenceCards.filter(card => card.id !== player.myEssenceCard.id && !usedCardIds.includes(card.id));
+        let hand = [];
+        let pool = [...handCandidates];
+        while (hand.length < 2 && pool.length > 0) {
+            const card = getRandom(pool);
+            hand.push(card);
+            usedCardIds.push(card.id); // handに加えたらusedCardIdsに追加
+            pool = pool.filter(c => c.id !== card.id);
+        }
+        player.hand = [player.myEssenceCard, ...hand];
+    });
+    const centralQuestion = await generateCentralQuestion(players);
+    timelineConfig = buildTimelineConfig(players);
+    gameState = {
+        currentPhase: 0,
+        currentTurn: 1, // 0:ルール, 1:参加者
+        currentPlayerIndex: 0,
+        centralQuestion,
+        boardCards: [],
+        activeDirectionCard: null,
+        playerQuestions: {},
+        gameLog: [],
+        players,
+        phase2DiscussionRound: 0,
+        maxPhase2DiscussionRounds: 4,
+        finalConclusion: ""
+    };
+    if (mainCentralQuestion) mainCentralQuestion.textContent = centralQuestion;
+    if (timelineEl) {
+        timelineEl.innerHTML = timelineConfig.map(step => `
+            <li>
+                <button data-step="${step.id}" class="timeline-item w-full text-left px-4 py-2 text-sm text-stone-700 rounded-md border-l-4 border-transparent hover:bg-amber-100/50 transition-colors duration-200">
+                    ${step.title}
+                </button>
+            </li>
+        `).join('');
+    }
+    updateUI('intro');
+    renderPlayersIntro(players);
+}
+
+// 2. 参加者タブ（section-intro）にプレイヤー情報を表示する関数
+function renderPlayersIntro(players) {
+    const sectionIntro = document.getElementById('section-intro');
+    if (!sectionIntro) return;
+    sectionIntro.innerHTML = `
+        <h3 class="text-2xl font-bold mb-4 text-stone-800 border-b-2 border-amber-300 pb-2">参加者紹介</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            ${players.map(player => `
+                <div class="p-4 bg-white rounded-lg border border-stone-200 text-center">
+                    <p class="text-2xl mb-2">${getPlayerInfo(player).emoji}</p>
+                    <p class="font-bold mt-2">${player.name}</p>
+                    <p class="text-sm text-stone-500 mb-1">${player.job}</p>
+                    <p class="text-xs text-stone-400 mb-1">好きなジャンル: ${player.favoriteGenre}</p>
+                    <p class="text-xs text-stone-400 mb-1">マイ・エッセンス: <span class="font-semibold text-stone-700">${player.myEssenceCard ? player.myEssenceCard.title : '---'}</span></p>
+                    <p class="text-xs text-stone-500 mt-2">${player.persona}</p>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+// LLMを使ってマイ・エッセンスカードを生成
+async function generateMyEssenceCard(player) {
+    const prompt = `あなたはBIBLIOMIXという知的対話ゲームのAIです。以下のプレイヤー情報をもとに、その人物が提示するにふさわしい「マイ・エッセンスカード」を1つ生成してください。
+
+【プレイヤー情報】
+氏名: ${player.name}
+年齢: ${player.age} 
+性別: ${player.gender}
+職業・役職: ${player.job}
+好きなジャンル: ${player.favoriteGenre}
+趣味: ${player.hobby}
+出身地: ${player.from}
+居住地: ${player.live}
+学歴: ${player.education}
+信仰: ${player.faith}
+ペルソナ説明: ${player.persona}
+
+【allAvailableEssenceCardsリスト】
+${allAvailableEssenceCards.map(card => `・${card.title}（著者: ${card.author}、ジャンル: ${card.genre}、出版年: ${card.publicationYear}）`).join('\n')}
+
+【出力フォーマット】
+{
+  "title": "本のタイトル",
+  "author": "著者名",
+  "publicationYear": 20XX,
+  "genre": "${player.favoriteGenre}",
+  "description": "本の要約（200字以内）",
+  "coreConcepts": ["概念1", "概念2", ...]
+}
+
+※必ず上記のallAvailableEssenceCardsリストの中から最もふさわしい1冊を選び、その本の情報を使って生成してください。創作・架空の本は禁止です。`;
+    const response = await callGeminiAPI(prompt);
+    try {
+        const json = JSON.parse(response.match(/\{[\s\S]*\}/)[0]);
+        return {
+            id: `my_${player.name}_${Date.now()}`,
+            type: 'my_essence',
+            player: player.name,
+            title: json.title,
+            author: json.author,
+            publicationYear: json.publicationYear,
+            genre: json.genre,
+            description: `${json.description}<br>核心概念：<ul>${json.coreConcepts.map(c => `<li><b>${c}</b></li>`).join('')}</ul>`
+        };
+    } catch (e) {
+        // フォールバック: 既存カードから
+        const fallback = allAvailableEssenceCards.find(card => card.genre === player.favoriteGenre) || getRandom(allAvailableEssenceCards);
+        return { ...fallback, id: `my_${player.name}_${Date.now()}`, type: 'my_essence', player: player.name };
+    }
+}
+
+// LLMを使ってcentralQuestionを生成（短くシンプルな問いに調整）
+async function generateCentralQuestion(players) {
+    const personaList = players.map(p => `・${p.name}（${p.job}、${p.favoriteGenre}好き、${p.persona}）`).join('\n');
+    const prompt = `あなたはBIBLIOMIXという知的対話ゲームのAIです。以下の4人の参加者がいます。それぞれの多様な視点やペルソナ、好きなジャンルを活かし、正解探しではなく、知的なディスカッションが盛り上がる「シンプルで本質的な問い」を1つ日本語で生成してください。\n\n【参加者リスト】\n${personaList}\n\n【出力フォーマット】\n問い: "ここに問い文（例：急速に変化する現代において、人間が『幸福』を感じるための本質とは何か？）"\n\n※問いは60文字以内、できるだけ短く、抽象度が高く、価値観や視点が交差しやすいものにしてください。\n※「〜とは何か？」「〜の本質は？」などの形式を推奨します。`;
+    const response = await callGeminiAPI(prompt);
+    const match = response.match(/問い[:：]\s*"([^"]+)"/);
+    return match ? match[1] : response.replace(/^.*?[:：]/, '').trim();
+}
+
+// LLMを使ってプレイヤー属性・ペルソナを生成（playerId付与・personas統合）
+async function generatePlayerLLM(index) {
+    const prompt = `あなたはBIBLIOMIXという知的対話ゲームのAIです。多様な4人のプレイヤーを生成してください。1人分ずつ出力します。以下のフォーマットで、氏名（日本人名または国際的な名前）、年齢、性別、職業・役職、好きなジャンル（${Object.keys(genreColors).join('、')}から1つ）、趣味、出身地、居住地、学歴、信仰、興味関心、問いかけ方、考え方のスタイルを日本語で生成してください。
+
+【出力フォーマット】
+{
+  "name": "氏名",
+  "age": 20-60,
+  "gender": "男性/女性/その他",
+  "job": "職業・役職",
+  "favoriteGenre": "ジャンル",
+  "hobby": "趣味",
+  "from": "出身地",
+  "live": "居住地",
+  "education": "学歴",
+  "faith": "信仰",
+  "interests": "興味関心（例：科学技術、物語、社会問題など）",
+  "questionStyle": "問いかけ方（例：直感的に問いかける、論理的に掘り下げる、比喩を使う等）",
+  "thinkingStyle": "考え方のスタイル（例：分析的、直感的、俯瞰的、感情重視など）"
+}
+
+1人分だけ出力してください。`;
+    const response = await callGeminiAPI(prompt);
+    try {
+        const json = JSON.parse(response.match(/\{[\s\S]*\}/)[0]);
+        // personas統合
+        const persona = `あなたは「${json.name}」です。興味関心: ${json.interests}。問いかけ方: ${json.questionStyle}。考え方のスタイル: ${json.thinkingStyle}。`;
+        return {
+            playerId: `p${index+1}`,
+            name: json.name,
+            age: json.age,
+            gender: json.gender,
+            job: json.job,
+            favoriteGenre: json.favoriteGenre,
+            hobby: json.hobby,
+            from: json.from,
+            live: json.live,
+            education: json.education,
+            faith: json.faith,
+            interests: json.interests,
+            questionStyle: json.questionStyle,
+            thinkingStyle: json.thinkingStyle,
+            persona,
+            myEssenceCard: null,
+            hand: [],
+            usedCardIds: []
+        };
+    } catch (e) {
+        // フォールバック: 乱数生成
+        const fallback = generatePlayer(index);
+        fallback.playerId = `p${index+1}`;
+        return fallback;
+    }
+}
+
+// プレイヤー生成（LLMベース）
+async function generatePlayersLLM(num = 4) {
+    // 4人同時に生成するプロンプト
+    const prompt = `あなたはBIBLIOMIXという知的対話ゲームのAIです。多様な4人のプレイヤーを同時に生成してください。全員が異なるジャンル・異なる経歴・異なる名前（できれば日本人名）になるようにしてください。同じジャンルや同じ名前・経歴が重複しないようにしてください。以下のフォーマットで、日本語で4人分まとめてJSON配列で出力してください。
+
+【出力フォーマット】
+[
+  {
+    "name": "氏名（できれば日本人名）",
+    "age": 20-60,
+    "gender": "男性/女性/その他",
+    "job": "職業・役職",
+    "favoriteGenre": "ジャンル（哲学、社会学、科学、文学、環境、ビジネス、歴史、料理、ゲーム、経済学、芸術、心理学のいずれか）",
+    "hobby": "趣味",
+    "from": "出身地",
+    "live": "居住地",
+    "education": "学歴",
+    "faith": "信仰",
+    "interests": "興味関心（例：科学技術、物語、社会問題など）",
+    "questionStyle": "問いかけ方（例：直感的に問いかける、論理的に掘り下げる、比喩を使う等）",
+    "thinkingStyle": "考え方のスタイル（例：分析的、直感的、俯瞰的、感情重視など）"
+  },
+  ...（あと3人分）
+]
+`;
+    const response = await callGeminiAPI(prompt);
+    let players = [];
+    try {
+        const jsonArr = JSON.parse(response.match(/\[([\s\S]*)\]/)[0]);
+        players = jsonArr.map((json, idx) => {
+            const persona = `あなたは「${json.name}」です。興味関心: ${json.interests}。問いかけ方: ${json.questionStyle}。考え方のスタイル: ${json.thinkingStyle}。`;
+            return {
+                playerId: `p${idx+1}`,
+                name: json.name,
+                age: json.age,
+                gender: json.gender,
+                job: json.job,
+                favoriteGenre: json.favoriteGenre,
+                hobby: json.hobby,
+                from: json.from,
+                live: json.live,
+                education: json.education,
+                faith: json.faith,
+                interests: json.interests,
+                questionStyle: json.questionStyle,
+                thinkingStyle: json.thinkingStyle,
+                persona,
+                myEssenceCard: null,
+                hand: [],
+                usedCardIds: []
+            };
+        });
+    } catch (e) {
+        // フォールバック: 乱数生成
+        players = generatePlayers(num);
+        players.forEach((p, idx) => p.playerId = `p${idx+1}`);
+    }
+    return players;
+}
+
+// timelineConfigの動的生成（プレイヤー名依存部分をplayerIdで動的に生成）
+function buildTimelineConfig(players) {
+    const config = [
+        { id: 'game_rules', title: 'ゲームルール', phase: 0, turn: 0, section: 'section-rules' },
+        { id: 'intro', title: '参加者', phase: 0, turn: 0, section: 'section-intro' },
+        { id: 'p1_t1_start', title: 'フェーズ1-T1開始', phase: 1, turn: 0, section: 'game-board-container', intro: "フェーズ1、第1ターンが始まります。AIエージェント達が各自のマイ・エッセンスカードを提示し、中央の問いに対する独自の視点から質問を投げかけます。" },
+    ];
+    // P1-T1: 各プレイヤー
+    players.forEach((player, idx) => {
+        config.push({
+            id: `p1_t1_${player.playerId}`,
+            title: `${player.name}の番 (P1-T1)`,
+            phase: 1,
+            turn: idx+1,
+            section: 'game-board-container',
+            intro: idx === 2 ? `${player.name}の番です。なお、フェーズ1の3ターン目である${player.name}の番は、もし適切なカードがなければスキップ可能です。ただし、今回のシミュレーションでは${player.name}はカードを提示します。` : undefined
+        });
+    });
+    config.push({ id: 'p1_t2_start', title: 'フェーズ1-T2開始', phase: 1, turn: 5, section: 'game-board-container', intro: "フェーズ1、第2ターンが始まります。ここで『化学反応の方向』カードが1枚引かれます。プレイヤーはこの方向性を考慮し、手札からエッセンスカードを提示するか、セレンディピティを発動します。" });
+    // P1-T2: 各プレイヤー
+    players.forEach((player, idx) => {
+        config.push({
+            id: `p1_t2_${player.playerId}`,
+            title: `${player.name}の番 (P1-T2)`,
+            phase: 1,
+            turn: 6+idx,
+            section: 'game-board-container'
+        });
+    });
+    config.push({ id: 'p2_dialogue', title: 'フェーズ2: 対話', phase: 2, turn: 1, section: 'game-board-container', intro: "フェーズ2に移行します。各プレイヤーが提示した問いかけと場に出ているカードを基に、チーム全体で自由なディスカッションを行います。このフェーズではAIエージェントが相互に発言し、アイデアの化学反応を深めます。" });
+    config.push({ id: 'p3_synthesis', title: 'フェーズ3: 結論', phase: 3, turn: 1, section: 'section-synthesis', intro: "フェーズ3。これまでの議論で生まれた洞察を統合し、中央の問いに対する最終的な結論を導き出します。知の化学反応マップが生成されます。" });
+    return config;
+}
+
+// advanceGameでtimelineConfigの範囲外アクセスを防ぐ
+function getTimelineStep(phase, turn) {
+    return timelineConfig.find(item => item.phase === phase && item.turn === turn);
+}
+
+
+</script>
+
+</body>
+</html>
