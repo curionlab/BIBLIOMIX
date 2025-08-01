@@ -1,6 +1,7 @@
 # BIBLIOMIX
 a card game BIBLIOMIX playing AI
 
+https://curionlab.github.io/BIBLIOMIX/
 
 以下のいずれかの方法で、**ローカルWebサーバー**を立てて、そのURL（例: http://localhost:8000/）でアクセスしてください。
 
